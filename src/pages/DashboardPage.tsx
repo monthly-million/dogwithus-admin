@@ -24,12 +24,12 @@ import dayjs from 'dayjs';
 async function fetchStats() {
   const today = dayjs().format('YYYY-MM-DD');
   const [users, dogs, matches, chatRooms, todayUsers] = await Promise.all([
-    supabase.from('users').select('*', { count: 'exact', head: true }),
+    supabase.from('profiles').select('*', { count: 'exact', head: true }),
     supabase.from('dogs').select('*', { count: 'exact', head: true }),
     supabase.from('matches').select('*', { count: 'exact', head: true }),
     supabase.from('chat_rooms').select('*', { count: 'exact', head: true }),
     supabase
-      .from('users')
+      .from('profiles')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`),
@@ -47,7 +47,7 @@ async function fetchStats() {
 async function fetchDailySignups() {
   const since = dayjs().subtract(13, 'day').format('YYYY-MM-DD');
   const { data } = await supabase
-    .from('users')
+    .from('profiles')
     .select('created_at')
     .gte('created_at', `${since}T00:00:00`)
     .order('created_at', { ascending: true });
