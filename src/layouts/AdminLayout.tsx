@@ -33,6 +33,7 @@ import MessageIcon from '@mui/icons-material/Message';
 import CandyIcon from '@mui/icons-material/Cake';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import LogoutIcon from '@mui/icons-material/Logout';
+import LockIcon from '@mui/icons-material/Lock';
 import PawIcon from '@mui/icons-material/EmojiNature';
 import { useAuth } from '../hooks/useAuth';
 
@@ -175,6 +176,16 @@ export default function AdminLayout() {
             </IconButton>
           </Tooltip>
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                navigate('/change-password');
+              }}
+            >
+              <LockIcon fontSize="small" sx={{ mr: 1 }} />
+              비밀번호 변경
+            </MenuItem>
+            <Divider />
             <MenuItem onClick={handleSignOut}>
               <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
               로그아웃
