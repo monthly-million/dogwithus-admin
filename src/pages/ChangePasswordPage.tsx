@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -31,7 +31,18 @@ export default function ChangePasswordPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
   const { changePassword, session } = useAuth();
+
+  // 이메일 복구 링크 클릭 시 type=recovery 세션 감지
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecoveryMode(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const passwordStrength = (): { level: number; label: string; color: string } => {
     if (newPassword.length === 0) return { level: 0, label: '', color: 'grey.300' };
@@ -55,7 +66,7 @@ export default function ChangePasswordPage() {
     setResetLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(session.user.email, {
-      redirectTo: `${window.location.origin}/change-password`,
+      redirectTo: `${window.location.origin}${import.meta.env.BASE_URL}#/change-password`,
     });
 
     if (error) {
@@ -101,6 +112,12 @@ export default function ChangePasswordPage() {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         {session?.user?.email} 계정의 비밀번호를 변경합니다.
       </Typography>
+
+      {isRecoveryMode && (
+        <Alert severity="info" icon={<EmailIcon fontSize="inherit" />} sx={{ mb: 2, borderRadius: 2 }}>
+          이메일의 복구 링크를 통해 접속했습니다. 아래에서 새 비밀번호를 설정해주세요.
+        </Alert>
+      )}
 
       <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3 }}>
         <CardContent sx={{ p: 4 }}>
