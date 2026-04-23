@@ -70,7 +70,7 @@ export default function App() {
             >
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="users" element={<UsersPage />} />
+              <Route path="profiles" element={<UsersPage />} />
               <Route path="dogs" element={<DogsPage />} />
               <Route path="signals" element={<SignalsPage />} />
               <Route path="matches" element={<MatchesPage />} />

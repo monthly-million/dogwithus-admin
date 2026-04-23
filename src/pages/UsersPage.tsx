@@ -93,6 +93,7 @@ const columns: GridColDef[] = [
   { field: 'nickname', headerName: '닉네임', width: 130 },
   { field: 'gender', headerName: '성별', width: 80 },
   { field: 'age', headerName: '나이', width: 70, type: 'number' },
+  { field: 'birth_date', headerName: '생년월일', width: 120 },
   {
     field: 'regions',
     headerName: '지역',
@@ -100,9 +101,27 @@ const columns: GridColDef[] = [
     renderCell: (p) => (Array.isArray(p.value) ? (p.value as string[]).join(', ') : String(p.value ?? '')),
   },
   { field: 'mbti', headerName: 'MBTI', width: 90 },
+  { field: 'smoking', headerName: '흡연', width: 90 },
+  { field: 'drinking', headerName: '음주', width: 90 },
+  { field: 'religion', headerName: '종교', width: 90 },
+  {
+    field: 'interests',
+    headerName: '관심사',
+    width: 160,
+    renderCell: (p) => (Array.isArray(p.value) ? (p.value as string[]).join(', ') : String(p.value ?? '')),
+  },
+  {
+    field: 'styles',
+    headerName: '스타일',
+    width: 160,
+    renderCell: (p) => (Array.isArray(p.value) ? (p.value as string[]).join(', ') : String(p.value ?? '')),
+  },
   { field: 'height', headerName: '키', width: 70, type: 'number' },
-  { field: 'job', headerName: '직업', width: 120 },
   { field: 'education', headerName: '학력', width: 100 },
+  { field: 'school_name', headerName: '학교명', width: 120 },
+  { field: 'job', headerName: '직업', width: 120 },
+  { field: 'bio', headerName: '자기소개', width: 200 },
+  { field: 'partner_filter', headerName: '상대방 필터', width: 120 },
   {
     field: 'approval_status',
     headerName: '승인상태',
@@ -118,7 +137,26 @@ const columns: GridColDef[] = [
       );
     },
   },
+  {
+    field: 'approved_at',
+    headerName: '승인일',
+    width: 160,
+    renderCell: (p) => (p.value ? dayjs(p.value as string).format('YYYY-MM-DD HH:mm') : '-'),
+  },
+  { field: 'rejected_reason', headerName: '거절 사유', width: 160 },
   { field: 'candy_balance', headerName: '캔디', width: 80, type: 'number' },
+  {
+    field: 'is_test_data',
+    headerName: '테스트',
+    width: 80,
+    renderCell: (p) => (p.value ? <Chip label="테스트" size="small" color="warning" /> : '-'),
+  },
+  {
+    field: 'is_admin',
+    headerName: '관리자',
+    width: 80,
+    renderCell: (p) => (p.value ? <Chip label="관리자" size="small" color="info" /> : '-'),
+  },
   {
     field: 'created_at',
     headerName: '가입일',
@@ -205,20 +243,37 @@ export default function UsersPage() {
     }
   };
 
-  const detailRows: [string, string | number | undefined][] = selectedUser
+  const detailRows: [string, string | number | boolean | undefined][] = selectedUser
     ? [
         ['ID', selectedUser.id],
+        ['디바이스 ID', selectedUser.device_id],
         ['닉네임', selectedUser.nickname],
         ['이메일', selectedUser.email],
         ['성별', selectedUser.gender],
+        ['생년월일', selectedUser.birth_date],
         ['나이', selectedUser.age],
         ['지역', Array.isArray(selectedUser.regions) ? selectedUser.regions.join(', ') : selectedUser.regions],
         ['MBTI', selectedUser.mbti],
+        ['흡연', selectedUser.smoking],
+        ['음주', selectedUser.drinking],
+        ['종교', selectedUser.religion],
+        ['관심사', Array.isArray(selectedUser.interests) ? selectedUser.interests.join(', ') : selectedUser.interests],
+        ['스타일', Array.isArray(selectedUser.styles) ? selectedUser.styles.join(', ') : selectedUser.styles],
         ['키', selectedUser.height ? `${selectedUser.height}cm` : '-'],
-        ['직업', selectedUser.job],
         ['학력', selectedUser.education],
+        ['학교명', selectedUser.school_name],
+        ['직업', selectedUser.job],
+        ['자기소개', selectedUser.bio],
+        ['상대방 필터', selectedUser.partner_filter],
+        ['승인 상태', selectedUser.approval_status],
+        ['승인일', selectedUser.approved_at ? dayjs(selectedUser.approved_at).format('YYYY-MM-DD HH:mm:ss') : '-'],
+        ['거절 사유', selectedUser.rejected_reason],
         ['캔디 잔액', selectedUser.candy_balance?.toLocaleString()],
+        ['FCM 토큰', selectedUser.fcm_token],
+        ['테스트 데이터', selectedUser.is_test_data ? '예' : '아니오'],
+        ['관리자', selectedUser.is_admin ? '예' : '아니오'],
         ['가입일', dayjs(selectedUser.created_at).format('YYYY-MM-DD HH:mm:ss')],
+        ['수정일', selectedUser.updated_at ? dayjs(selectedUser.updated_at).format('YYYY-MM-DD HH:mm:ss') : '-'],
       ]
     : [];
 

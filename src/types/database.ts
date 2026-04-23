@@ -1,17 +1,32 @@
 export interface User {
   id: string;
   email?: string;
+  device_id?: string;
   nickname: string;
   gender?: string;
+  birth_date?: string;
   age?: number;
   regions?: string[];
   mbti?: string;
+  smoking?: string;
+  drinking?: string;
+  religion?: string;
+  interests?: string[];
+  styles?: string[];
   height?: number;
-  job?: string;
   education?: string;
-  approval_status?: string;
-  candy_balance?: number;
+  school_name?: string;
+  job?: string;
+  bio?: string;
   profile_photos?: string[];
+  partner_filter?: string;
+  approval_status?: string;
+  approved_at?: string;
+  rejected_reason?: string;
+  candy_balance?: number;
+  fcm_token?: string;
+  is_test_data?: boolean;
+  is_admin?: boolean;
   created_at: string;
   updated_at?: string;
 }

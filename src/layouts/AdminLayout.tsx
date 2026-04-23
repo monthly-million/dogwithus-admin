@@ -42,7 +42,7 @@ const TRANSITION = 'width 0.25s ease, margin 0.25s ease';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
-  { label: 'Users', path: '/users', icon: <PeopleIcon /> },
+  { label: 'Profiles', path: '/profiles', icon: <PeopleIcon /> },
   { label: 'Dogs', path: '/dogs', icon: <PetsIcon /> },
   { label: 'Signals', path: '/signals', icon: <ConnectWithoutContactIcon /> },
   { label: 'Matches', path: '/matches', icon: <FavoriteIcon /> },
