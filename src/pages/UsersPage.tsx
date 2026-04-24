@@ -57,7 +57,7 @@ const PHOTO_BUCKET = 'profile-photos';
 
 type ApprovalStatus = 'approved' | 'pending' | 'rejected';
 
-type MatchField = 'nickname' | 'gender' | 'regions' | 'age' | 'smoking' | 'drinking' | 'religion' | 'interests' | 'styles' | 'height' | 'bio';
+type MatchField = 'nickname' | 'gender' | 'regions' | 'age' | 'smoking' | 'drinking' | 'religion' | 'height' | 'bio';
 
 const MATCH_COLUMNS: { key: MatchField; label: string; highlightable: boolean; minWidth: number }[] = [
   { key: 'nickname', label: '닉네임', highlightable: false, minWidth: 90 },
@@ -67,8 +67,6 @@ const MATCH_COLUMNS: { key: MatchField; label: string; highlightable: boolean; m
   { key: 'smoking', label: '흡연', highlightable: true, minWidth: 80 },
   { key: 'drinking', label: '음주', highlightable: true, minWidth: 80 },
   { key: 'religion', label: '종교', highlightable: true, minWidth: 80 },
-  { key: 'interests', label: '관심사', highlightable: true, minWidth: 150 },
-  { key: 'styles', label: '스타일', highlightable: true, minWidth: 150 },
   { key: 'height', label: '키', highlightable: false, minWidth: 60 },
   { key: 'bio', label: '자기소개', highlightable: false, minWidth: 180 },
 ];
@@ -618,12 +616,6 @@ function ManualMatchModal({ open, onClose, userA, allUsers }: ManualMatchModalPr
               },
               {
                 num: '5',
-                primary: '관심사 겹치는 수 많은 순',
-                secondary: '공통 관심사 항목이 많을수록 앞에 표시됩니다.',
-                color: '#8e24aa',
-              },
-              {
-                num: '6',
                 primary: '흡연·음주 일치 순',
                 secondary: '흡연 여부와 음주 여부가 같을수록 앞에 표시됩니다. (최대 2점)',
                 color: '#00897b',
@@ -712,8 +704,8 @@ function ManualMatchModal({ open, onClose, userA, allUsers }: ManualMatchModalPr
                       whiteSpace: col.key === 'bio' ? 'normal' : 'nowrap',
                     }}
                   >
-                    {col.key === 'regions' || col.key === 'interests' || col.key === 'styles'
-                      ? <ArrayCell items={userA[col.key] as string[] | undefined} />
+                    {col.key === 'regions'
+                      ? <ArrayCell items={userA.regions} />
                       : formatFieldValue(userA, col.key)}
                   </TableCell>
                 ))}
@@ -785,8 +777,8 @@ function ManualMatchModal({ open, onClose, userA, allUsers }: ManualMatchModalPr
                             whiteSpace: col.key === 'bio' ? 'normal' : 'nowrap',
                           }}
                         >
-                          {col.key === 'regions' || col.key === 'interests' || col.key === 'styles'
-                            ? <ArrayCell items={candidate[col.key] as string[] | undefined} />
+                          {col.key === 'regions'
+                            ? <ArrayCell items={candidate.regions} />
                             : formatFieldValue(candidate, col.key)}
                         </TableCell>
                       ))}
@@ -851,18 +843,6 @@ const columns: GridColDef[] = [
   { field: 'smoking', headerName: '흡연', width: 90 },
   { field: 'drinking', headerName: '음주', width: 90 },
   { field: 'religion', headerName: '종교', width: 90 },
-  {
-    field: 'interests',
-    headerName: '관심사',
-    width: 160,
-    renderCell: (p) => (Array.isArray(p.value) ? (p.value as string[]).join(', ') : String(p.value ?? '')),
-  },
-  {
-    field: 'styles',
-    headerName: '스타일',
-    width: 160,
-    renderCell: (p) => (Array.isArray(p.value) ? (p.value as string[]).join(', ') : String(p.value ?? '')),
-  },
   { field: 'height', headerName: '키', width: 70, type: 'number' },
   { field: 'education', headerName: '학력', width: 100 },
   { field: 'school_name', headerName: '학교명', width: 120 },
@@ -1013,8 +993,6 @@ export default function UsersPage() {
         ['흡연', selectedUser.smoking],
         ['음주', selectedUser.drinking],
         ['종교', selectedUser.religion],
-        ['관심사', Array.isArray(selectedUser.interests) ? selectedUser.interests.join(', ') : selectedUser.interests],
-        ['스타일', Array.isArray(selectedUser.styles) ? selectedUser.styles.join(', ') : selectedUser.styles],
         ['키', selectedUser.height ? `${selectedUser.height}cm` : '-'],
         ['학력', selectedUser.education],
         ['학교명', selectedUser.school_name],
