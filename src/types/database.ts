@@ -118,3 +118,11 @@ export interface Notification {
   read_at?: string;
   created_at: string;
 }
+
+export interface Report {
+  id: string;
+  reporter_id: string;
+  reported_id: string;
+  reason: string;
+  created_at: string;
+}
