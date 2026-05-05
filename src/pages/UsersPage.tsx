@@ -50,7 +50,7 @@ import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, supabaseAdmin } from '../api/supabaseClient';
-import type { User, Match } from '../types/database';
+import type { User, Match, BlockedContact } from '../types/database';
 import dayjs from 'dayjs';
 
 const PHOTO_BUCKET = 'profile-photos';
@@ -115,6 +115,36 @@ async function createMatches(user1Id: string, user2Ids: string[]) {
   const inserts = user2Ids.map((id) => ({ user1_id: user1Id, user2_id: id }));
   const { error } = await supabaseAdmin.from('matches').insert(inserts);
   if (error) throw error;
+}
+
+/**
+ * userA가 차단한 전화번호 목록과 userA의 전화번호를 차단한 유저 ID 목록을 반환합니다.
+ * - blockedPhones: userA(owner_id)가 등록한 차단 번호 → 해당 번호를 가진 유저 제외
+ * - blockedByOwnerIds: userA의 전화번호를 등록한 owner_id → 해당 유저 제외
+ */
+async function fetchBlockedContactsForMatch(
+  userId: string,
+  userPhone?: string,
+): Promise<{ blockedPhones: string[]; blockedByOwnerIds: string[] }> {
+  const [byMeResult, byOthersResult] = await Promise.all([
+    supabase
+      .from('blocked_contacts')
+      .select('phone')
+      .eq('owner_id', userId),
+    userPhone
+      ? supabase
+          .from('blocked_contacts')
+          .select('owner_id')
+          .eq('phone', userPhone)
+      : Promise.resolve({ data: [] as Pick<BlockedContact, 'owner_id'>[], error: null }),
+  ]);
+
+  const blockedPhones = (byMeResult.data ?? []).map((r) => (r as Pick<BlockedContact, 'phone'>).phone);
+  const blockedByOwnerIds = (byOthersResult.data ?? []).map(
+    (r) => (r as Pick<BlockedContact, 'owner_id'>).owner_id,
+  );
+
+  return { blockedPhones, blockedByOwnerIds };
 }
 
 // ─── Photo helpers ────────────────────────────────────────────────────────────
@@ -426,23 +456,41 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
     enabled: open,
   });
 
+  const { data: blockedContacts, isLoading: blockedLoading } = useQuery({
+    queryKey: ['blocked-contacts-for-match', userA.id, userA.phone],
+    queryFn: () => fetchBlockedContactsForMatch(userA.id, userA.phone),
+    enabled: open,
+  });
+
   const matchedIds = useMemo(() => {
     return new Set(
       existingMatches.map((m) => (m.user1_id === userA.id ? m.user2_id : m.user1_id))
     );
   }, [existingMatches, userA.id]);
 
+  const blockedIdsSet = useMemo(() => {
+    if (!blockedContacts) return new Set<string>();
+    const { blockedPhones, blockedByOwnerIds } = blockedContacts;
+    const ids = new Set<string>(blockedByOwnerIds);
+    // 차단된 전화번호를 가진 유저 ID 추가
+    allUsers.forEach((u) => {
+      if (u.phone && blockedPhones.includes(u.phone)) ids.add(u.id);
+    });
+    return ids;
+  }, [blockedContacts, allUsers]);
+
   const candidates = useMemo(() => {
-    if (matchesLoading) return [];
+    if (matchesLoading || blockedLoading) return [];
     const filtered = allUsers.filter((u) => {
       if (u.id === userA.id) return false;
       if (matchedIds.has(u.id)) return false;
+      if (blockedIdsSet.has(u.id)) return false;
       // 이성만 표시 (성별 정보가 있는 경우에만 필터링)
       if (userA.gender && u.gender && u.gender === userA.gender) return false;
       return true;
     });
     return sortCandidates(userA, filtered);
-  }, [allUsers, userA, matchedIds, matchesLoading]);
+  }, [allUsers, userA, matchedIds, blockedIdsSet, matchesLoading, blockedLoading]);
 
   // 유저 A 첫 번째 사진 signed URL
   const userAFirstPhoto = userA.profile_photos?.[0];
@@ -610,30 +658,37 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
               },
               {
                 num: '2',
+                primary: '차단 연락처 제외',
+                secondary:
+                  'blocked_contacts 테이블 기준으로, 유저 A가 차단한 번호의 유저 또는 유저 A의 번호를 차단한 유저는 목록에서 제외됩니다.',
+                color: '#8e24aa',
+              },
+              {
+                num: '3',
                 primary: '지역 가까운 순',
                 secondary: 'regions 배열에서 겹치는 지역 문자열이 많을수록 앞에 표시됩니다. (실제 좌표 기반이 아닌 지역명 일치 기반)',
                 color: '#1e88e5',
               },
               {
-                num: '3',
+                num: '4',
                 primary: '나이 차이 적은 순',
                 secondary: '나이 차이가 적을수록 앞에 표시됩니다. 차이가 적을수록 초록색 배경이 진해집니다.',
                 color: '#43a047',
               },
               {
-                num: '4',
+                num: '5',
                 primary: '같은 종교 우선',
                 secondary: '유저 A와 종교가 같은 사람이 앞에 표시됩니다.',
                 color: '#fb8c00',
               },
               {
-                num: '5',
+                num: '6',
                 primary: '흡연·음주 일치 순',
                 secondary: '흡연 여부와 음주 여부가 같을수록 앞에 표시됩니다. (최대 2점)',
                 color: '#00897b',
               },
             ].map((item) => (
-              <ListItem key={item.num} alignItems="flex-start" sx={{ py: 0.5, px: 1 }}>
+              <ListItem key={item.primary} alignItems="flex-start" sx={{ py: 0.5, px: 1 }}>
                 <ListItemIcon sx={{ minWidth: 28, mt: 0.3 }}>
                   <Box
                     sx={{

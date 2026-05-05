@@ -1,6 +1,7 @@
 export interface User {
   id: string;
   email?: string;
+  phone?: string;
   device_id?: string;
   nickname: string;
   gender?: string;
@@ -29,6 +30,13 @@ export interface User {
   is_admin?: boolean;
   created_at: string;
   updated_at?: string;
+}
+
+export interface BlockedContact {
+  id: string;
+  owner_id: string;
+  phone: string;
+  created_at: string;
 }
 
 export interface Dog {
