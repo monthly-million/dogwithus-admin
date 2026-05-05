@@ -34,6 +34,7 @@ import CandyIcon from '@mui/icons-material/Cake';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import ReportIcon from '@mui/icons-material/Report';
+import ContactSupportIcon from '@mui/icons-material/ContactSupport';
 import LogoutIcon from '@mui/icons-material/Logout';
 import LockIcon from '@mui/icons-material/Lock';
 import PawIcon from '@mui/icons-material/EmojiNature';
@@ -54,6 +55,7 @@ const NAV_ITEMS = [
   { label: 'Notifications', path: '/notifications', icon: <NotificationsIcon /> },
   { label: 'Announcements', path: '/announcements', icon: <CampaignIcon /> },
   { label: 'Reports', path: '/reports', icon: <ReportIcon /> },
+  { label: 'Inquiries', path: '/inquiries', icon: <ContactSupportIcon /> },
 ];
 
 export default function AdminLayout() {

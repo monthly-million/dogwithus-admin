@@ -24,12 +24,21 @@ export interface User {
   approval_status?: string;
   approved_at?: string;
   rejected_reason?: string;
-  candy_balance?: number;
+  cookie_balance?: number;
   fcm_token?: string;
   is_test_data?: boolean;
   is_admin?: boolean;
   created_at: string;
   updated_at?: string;
+  deleted_at?: string;
+  notifications_enabled?: boolean;
+  suspended_at?: string;
+  suspended_until?: string;
+  suspended_reason?: string;
+  notify_signals?: boolean;
+  notify_messages?: boolean;
+  notify_matches?: boolean;
+  notify_announcements?: boolean;
 }
 
 export interface BlockedContact {
@@ -125,4 +134,20 @@ export interface Report {
   reported_id: string;
   reason: string;
   created_at: string;
+}
+
+export type InquiryCategory = 'general' | 'account' | 'payment' | 'bug' | 'report' | 'other';
+export type InquiryStatus = 'open' | 'in_progress' | 'answered' | 'closed';
+
+export interface Inquiry {
+  id: string;
+  user_id: string;
+  category: InquiryCategory;
+  subject: string;
+  body: string;
+  status: InquiryStatus;
+  admin_reply: string | null;
+  admin_replied_at: string | null;
+  created_at: string;
+  updated_at: string;
 }

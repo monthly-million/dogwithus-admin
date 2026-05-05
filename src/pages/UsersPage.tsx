@@ -44,6 +44,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SaveIcon from '@mui/icons-material/Save';
 import FavoriteIcon from '@mui/icons-material/Favorite';
+import BlockIcon from '@mui/icons-material/Block';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
@@ -109,6 +111,14 @@ async function fetchMatchesForUser(userId: string): Promise<Match[]> {
     .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
   if (error) throw error;
   return (data ?? []) as Match[];
+}
+
+async function updateSuspension(
+  userId: string,
+  payload: { suspended_at: string | null; suspended_until: string | null; suspended_reason: string | null },
+) {
+  const { error } = await supabaseAdmin.from('profiles').update(payload).eq('id', userId);
+  if (error) throw new Error(error.message ?? JSON.stringify(error));
 }
 
 async function createMatches(user1Id: string, user2Ids: string[]) {
@@ -901,6 +911,7 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
 const columns: GridColDef[] = [
   { field: 'id', headerName: 'ID', width: 100, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
   { field: 'nickname', headerName: '닉네임', width: 130 },
+  { field: 'phone', headerName: '전화번호', width: 130 },
   { field: 'gender', headerName: '성별', width: 80 },
   { field: 'age', headerName: '나이', width: 70, type: 'number' },
   { field: 'birth_date', headerName: '생년월일', width: 120 },
@@ -954,7 +965,7 @@ const columns: GridColDef[] = [
     renderCell: (p) => (p.value ? dayjs(p.value as string).format('YYYY-MM-DD HH:mm') : '-'),
   },
   { field: 'rejected_reason', headerName: '거절 사유', width: 160 },
-  { field: 'candy_balance', headerName: '캔디', width: 80, type: 'number' },
+  { field: 'cookie_balance', headerName: '쿠키', width: 80, type: 'number' },
   {
     field: 'is_test_data',
     headerName: '테스트',
@@ -972,6 +983,28 @@ const columns: GridColDef[] = [
     headerName: '가입일',
     width: 160,
     renderCell: (p) => dayjs(p.value as string).format('YYYY-MM-DD HH:mm'),
+  },
+  {
+    field: 'suspended_until',
+    headerName: '정지 종료일',
+    width: 160,
+    renderCell: (p) => {
+      if (!p.value) return '-';
+      const isActive = dayjs(p.value as string).isAfter(dayjs());
+      return (
+        <Chip
+          label={dayjs(p.value as string).format('YYYY-MM-DD HH:mm')}
+          size="small"
+          color={isActive ? 'error' : 'default'}
+        />
+      );
+    },
+  },
+  {
+    field: 'deleted_at',
+    headerName: '탈퇴일',
+    width: 160,
+    renderCell: (p) => (p.value ? dayjs(p.value as string).format('YYYY-MM-DD HH:mm') : '-'),
   },
 ];
 
@@ -996,6 +1029,13 @@ export default function UsersPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectLoading, setRejectLoading] = useState(false);
   const [rejectError, setRejectError] = useState('');
+
+  // 정지 관리
+  const [editSuspendedUntil, setEditSuspendedUntil] = useState('');
+  const [editSuspendedReason, setEditSuspendedReason] = useState('');
+  const [suspending, setSuspending] = useState(false);
+  const [suspendError, setSuspendError] = useState('');
+  const [suspendSuccess, setSuspendSuccess] = useState(false);
 
   const { data = [], isLoading } = useQuery({
     queryKey: ['users'],
@@ -1033,6 +1073,12 @@ export default function UsersPage() {
     setEditStatus((user.approval_status as ApprovalStatus) ?? 'pending');
     setSaveError('');
     setSaveSuccess(false);
+    setEditSuspendedUntil(
+      user.suspended_until ? dayjs(user.suspended_until).format('YYYY-MM-DDTHH:mm') : '',
+    );
+    setEditSuspendedReason(user.suspended_reason ?? '');
+    setSuspendError('');
+    setSuspendSuccess(false);
   };
 
   const handleCloseDrawer = () => {
@@ -1041,9 +1087,67 @@ export default function UsersPage() {
     setSaveError('');
     setSaveSuccess(false);
     setMatchModalOpen(false);
+    setEditSuspendedUntil('');
+    setEditSuspendedReason('');
+    setSuspendError('');
+    setSuspendSuccess(false);
   };
 
   const isStatusChanged = editStatus !== '' && editStatus !== selectedUser?.approval_status;
+
+  const isSuspended = Boolean(
+    selectedUser?.suspended_until && dayjs(selectedUser.suspended_until).isAfter(dayjs()),
+  );
+
+  const handleApplySuspension = async () => {
+    if (!selectedUser || !editSuspendedUntil) return;
+    setSuspending(true);
+    setSuspendError('');
+    setSuspendSuccess(false);
+    try {
+      const now = new Date().toISOString();
+      const payload = {
+        suspended_at: selectedUser.suspended_at ?? now,
+        suspended_until: new Date(editSuspendedUntil).toISOString(),
+        suspended_reason: editSuspendedReason.trim() || null,
+      };
+      await updateSuspension(selectedUser.id, payload);
+      const updated = { ...selectedUser, ...payload };
+      setSelectedUser(updated);
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setSuspendSuccess(true);
+    } catch (err) {
+      setSuspendError(err instanceof Error ? err.message : '정지 처리에 실패했습니다.');
+    } finally {
+      setSuspending(false);
+    }
+  };
+
+  const handleLiftSuspension = async () => {
+    if (!selectedUser) return;
+    setSuspending(true);
+    setSuspendError('');
+    setSuspendSuccess(false);
+    try {
+      const payload = { suspended_at: null, suspended_until: null, suspended_reason: null };
+      await updateSuspension(selectedUser.id, payload);
+      const updated = {
+        ...selectedUser,
+        suspended_at: undefined,
+        suspended_until: undefined,
+        suspended_reason: undefined,
+      };
+      setSelectedUser(updated);
+      setEditSuspendedUntil('');
+      setEditSuspendedReason('');
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setSuspendSuccess(true);
+    } catch (err) {
+      setSuspendError(err instanceof Error ? err.message : '정지 해제에 실패했습니다.');
+    } finally {
+      setSuspending(false);
+    }
+  };
 
   const handleSaveClick = () => {
     if (!isStatusChanged) return;
@@ -1114,6 +1218,7 @@ export default function UsersPage() {
         ['ID', selectedUser.id],
         ['디바이스 ID', selectedUser.device_id],
         ['닉네임', selectedUser.nickname],
+        ['전화번호', selectedUser.phone],
         ['이메일', selectedUser.email],
         ['성별', selectedUser.gender],
         ['생년월일', selectedUser.birth_date],
@@ -1134,12 +1239,18 @@ export default function UsersPage() {
         ['승인 상태', selectedUser.approval_status],
         ['승인일', selectedUser.approved_at ? dayjs(selectedUser.approved_at).format('YYYY-MM-DD HH:mm:ss') : '-'],
         ['거절 사유', selectedUser.rejected_reason],
-        ['캔디 잔액', selectedUser.candy_balance?.toLocaleString()],
+        ['쿠키 잔액', selectedUser.cookie_balance?.toLocaleString()],
         ['FCM 토큰', selectedUser.fcm_token],
         ['테스트 데이터', selectedUser.is_test_data ? '예' : '아니오'],
         ['관리자', selectedUser.is_admin ? '예' : '아니오'],
+        ['알림 허용', selectedUser.notifications_enabled === false ? '꺼짐' : '켜짐'],
+        ['시그널 알림', selectedUser.notify_signals === false ? '꺼짐' : '켜짐'],
+        ['메시지 알림', selectedUser.notify_messages === false ? '꺼짐' : '켜짐'],
+        ['매칭 알림', selectedUser.notify_matches === false ? '꺼짐' : '켜짐'],
+        ['공지 알림', selectedUser.notify_announcements === false ? '꺼짐' : '켜짐'],
         ['가입일', dayjs(selectedUser.created_at).format('YYYY-MM-DD HH:mm:ss')],
         ['수정일', selectedUser.updated_at ? dayjs(selectedUser.updated_at).format('YYYY-MM-DD HH:mm:ss') : '-'],
+        ['탈퇴일', selectedUser.deleted_at ? dayjs(selectedUser.deleted_at).format('YYYY-MM-DD HH:mm:ss') : '-'],
       ]
     : [];
 
@@ -1342,6 +1453,106 @@ export default function UsersPage() {
                   {saveError}
                 </Alert>
               )}
+            </Box>
+
+            <Divider />
+
+            {/* 정지 관리 */}
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  정지 관리
+                </Typography>
+                {isSuspended && (
+                  <Chip
+                    label="정지 중"
+                    size="small"
+                    color="error"
+                    icon={<BlockIcon />}
+                    sx={{ fontSize: 11, height: 20 }}
+                  />
+                )}
+              </Box>
+
+              {isSuspended && (
+                <Alert severity="warning" sx={{ mb: 1.5, fontSize: 12, py: 0.5 }}>
+                  <strong>{dayjs(selectedUser?.suspended_until).format('YYYY-MM-DD HH:mm')}</strong> 까지 정지
+                  {selectedUser?.suspended_reason && (
+                    <> · {selectedUser.suspended_reason}</>
+                  )}
+                </Alert>
+              )}
+
+              <TextField
+                label="정지 종료일시"
+                type="datetime-local"
+                value={editSuspendedUntil}
+                onChange={(e) => {
+                  setEditSuspendedUntil(e.target.value);
+                  setSuspendSuccess(false);
+                  setSuspendError('');
+                }}
+                size="small"
+                fullWidth
+                sx={{ mb: 1 }}
+                slotProps={{ inputLabel: { shrink: true } }}
+                disabled={suspending}
+              />
+              <TextField
+                label="정지 사유"
+                multiline
+                minRows={2}
+                maxRows={4}
+                value={editSuspendedReason}
+                onChange={(e) => {
+                  setEditSuspendedReason(e.target.value);
+                  setSuspendSuccess(false);
+                  setSuspendError('');
+                }}
+                size="small"
+                fullWidth
+                placeholder="정지 사유를 입력하세요..."
+                sx={{ mb: 1 }}
+                disabled={suspending}
+              />
+
+              {suspendError && (
+                <Alert severity="error" sx={{ mb: 1 }}>{suspendError}</Alert>
+              )}
+              {suspendSuccess && (
+                <Alert severity="success" sx={{ mb: 1 }}>정지 정보가 업데이트되었습니다.</Alert>
+              )}
+
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button
+                  variant="contained"
+                  color="warning"
+                  size="small"
+                  fullWidth
+                  startIcon={
+                    suspending ? <CircularProgress size={14} color="inherit" /> : <BlockIcon />
+                  }
+                  onClick={handleApplySuspension}
+                  disabled={!editSuspendedUntil || suspending}
+                >
+                  정지 적용
+                </Button>
+                {isSuspended && (
+                  <Button
+                    variant="outlined"
+                    color="inherit"
+                    size="small"
+                    fullWidth
+                    startIcon={
+                      suspending ? <CircularProgress size={14} color="inherit" /> : <LockOpenIcon />
+                    }
+                    onClick={handleLiftSuspension}
+                    disabled={suspending}
+                  >
+                    정지 해제
+                  </Button>
+                )}
+              </Box>
             </Box>
 
             <Divider />

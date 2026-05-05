@@ -22,6 +22,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import ReportsPage from './pages/ReportsPage';
+import InquiriesPage from './pages/InquiriesPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -82,6 +83,7 @@ export default function App() {
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="announcements" element={<AnnouncementsPage />} />
               <Route path="reports" element={<ReportsPage />} />
+              <Route path="inquiries" element={<InquiriesPage />} />
               <Route path="change-password" element={<ChangePasswordPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
