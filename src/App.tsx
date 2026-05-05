@@ -19,6 +19,7 @@ import ChatRoomsPage from './pages/ChatRoomsPage';
 import MessagesPage from './pages/MessagesPage';
 import CandyTransactionsPage from './pages/CandyTransactionsPage';
 import NotificationsPage from './pages/NotificationsPage';
+import AnnouncementsPage from './pages/AnnouncementsPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 
 const queryClient = new QueryClient({
@@ -78,6 +79,7 @@ export default function App() {
               <Route path="messages" element={<MessagesPage />} />
               <Route path="candy-transactions" element={<CandyTransactionsPage />} />
               <Route path="notifications" element={<NotificationsPage />} />
+              <Route path="announcements" element={<AnnouncementsPage />} />
               <Route path="change-password" element={<ChangePasswordPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
