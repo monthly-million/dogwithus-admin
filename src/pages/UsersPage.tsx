@@ -90,12 +90,16 @@ async function fetchUsers() {
   return data as User[];
 }
 
-async function updateApprovalStatus(userId: string, status: ApprovalStatus) {
-  const { error } = await supabase
+async function updateApprovalStatus(userId: string, status: ApprovalStatus, rejectedReason?: string) {
+  const payload: Record<string, unknown> = { approval_status: status };
+  if (status === 'rejected' && rejectedReason !== undefined) {
+    payload.rejected_reason = rejectedReason;
+  }
+  const { error } = await supabaseAdmin
     .from('profiles')
-    .update({ approval_status: status })
+    .update(payload)
     .eq('id', userId);
-  if (error) throw error;
+  if (error) throw new Error(error.message ?? JSON.stringify(error));
 }
 
 async function fetchMatchesForUser(userId: string): Promise<Match[]> {
@@ -403,9 +407,11 @@ interface ManualMatchModalProps {
   onClose: () => void;
   userA: User;
   allUsers: User[];
+  approvalMode?: boolean;
+  onApproveAfterMatch?: () => Promise<void>;
 }
 
-function ManualMatchModal({ open, onClose, userA, allUsers }: ManualMatchModalProps) {
+function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false, onApproveAfterMatch }: ManualMatchModalProps) {
   const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [matching, setMatching] = useState(false);
@@ -486,13 +492,19 @@ function ManualMatchModal({ open, onClose, userA, allUsers }: ManualMatchModalPr
   };
 
   const handleMatch = async () => {
-    if (selectedIds.length === 0 || matching) return;
+    const minRequired = approvalMode ? 2 : 1;
+    if (selectedIds.length < minRequired || (approvalMode && selectedIds.length !== 2) || matching) return;
     setMatching(true);
     setMatchError('');
     setMatchSuccess(false);
     try {
       await createMatches(userA.id, selectedIds);
       await queryClient.invalidateQueries({ queryKey: ['matches-for-user', userA.id] });
+      if (approvalMode && onApproveAfterMatch) {
+        await onApproveAfterMatch();
+        handleClose();
+        return;
+      }
       setMatchSuccess(true);
       setSelectedIds([]);
     } catch (err) {
@@ -799,10 +811,14 @@ function ManualMatchModal({ open, onClose, userA, allUsers }: ManualMatchModalPr
       />
 
       <DialogActions sx={{ px: 3, py: 2, justifyContent: 'space-between', borderTop: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="body2" color="text.secondary">
-          {selectedIds.length > 0
-            ? `${selectedIds.length}명 선택됨 (최대 2명)`
-            : '매칭할 사람의 행을 클릭하여 선택하세요 (최대 2명)'}
+        <Typography variant="body2" color={approvalMode && selectedIds.length !== 2 ? 'warning.main' : 'text.secondary'}>
+          {approvalMode
+            ? selectedIds.length === 2
+              ? '2명 선택됨 · 매칭 후 승인됩니다'
+              : `${selectedIds.length}/2명 선택 (승인을 위해 정확히 2명 필수)`
+            : selectedIds.length > 0
+              ? `${selectedIds.length}명 선택됨 (최대 2명)`
+              : '매칭할 사람의 행을 클릭하여 선택하세요 (최대 2명)'}
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button onClick={handleClose} variant="outlined" color="inherit">
@@ -811,13 +827,13 @@ function ManualMatchModal({ open, onClose, userA, allUsers }: ManualMatchModalPr
           <Button
             onClick={handleMatch}
             variant="contained"
-            color="primary"
-            disabled={selectedIds.length === 0 || matching}
+            color={approvalMode ? 'success' : 'primary'}
+            disabled={(approvalMode ? selectedIds.length !== 2 : selectedIds.length === 0) || matching}
             startIcon={
               matching ? <CircularProgress size={14} color="inherit" /> : <FavoriteIcon />
             }
           >
-            매칭하기
+            {approvalMode ? '매칭 후 승인' : '매칭하기'}
           </Button>
         </Box>
       </DialogActions>
@@ -843,6 +859,18 @@ const columns: GridColDef[] = [
   { field: 'smoking', headerName: '흡연', width: 90 },
   { field: 'drinking', headerName: '음주', width: 90 },
   { field: 'religion', headerName: '종교', width: 90 },
+  {
+    field: 'interests',
+    headerName: '관심사',
+    width: 160,
+    renderCell: (p) => (Array.isArray(p.value) ? (p.value as string[]).join(', ') : String(p.value ?? '')),
+  },
+  {
+    field: 'styles',
+    headerName: '스타일',
+    width: 160,
+    renderCell: (p) => (Array.isArray(p.value) ? (p.value as string[]).join(', ') : String(p.value ?? '')),
+  },
   { field: 'height', headerName: '키', width: 70, type: 'number' },
   { field: 'education', headerName: '학력', width: 100 },
   { field: 'school_name', headerName: '학교명', width: 120 },
@@ -904,8 +932,15 @@ export default function UsersPage() {
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [matchModalOpen, setMatchModalOpen] = useState(false);
+  const [matchModalApprovalMode, setMatchModalApprovalMode] = useState(false);
   const [lightboxUser, setLightboxUser] = useState<User | null>(null);
   const [lightboxInitialIndex, setLightboxInitialIndex] = useState(0);
+
+  // 거절 사유 다이얼로그
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectLoading, setRejectLoading] = useState(false);
+  const [rejectError, setRejectError] = useState('');
 
   const { data = [], isLoading } = useQuery({
     queryKey: ['users'],
@@ -957,7 +992,18 @@ export default function UsersPage() {
 
   const handleSaveClick = () => {
     if (!isStatusChanged) return;
-    setConfirmOpen(true);
+    if (editStatus === 'approved') {
+      // 수동 매칭 모달을 승인 모드로 열기
+      setMatchModalApprovalMode(true);
+      setMatchModalOpen(true);
+    } else if (editStatus === 'rejected') {
+      // 거절 사유 입력 다이얼로그 열기
+      setRejectReason('');
+      setRejectError('');
+      setRejectDialogOpen(true);
+    } else {
+      setConfirmOpen(true);
+    }
   };
 
   const handleConfirm = async () => {
@@ -979,6 +1025,35 @@ export default function UsersPage() {
     }
   };
 
+  // 수동 매칭 완료 후 승인 처리 (approvalMode)
+  const handleApproveAfterMatch = async () => {
+    if (!selectedUser) return;
+    await updateApprovalStatus(selectedUser.id, 'approved');
+    setSelectedUser({ ...selectedUser, approval_status: 'approved' });
+    setEditStatus('approved');
+    await queryClient.invalidateQueries({ queryKey: ['users'] });
+    setSaveSuccess(true);
+  };
+
+  // 거절 사유 확인 처리
+  const handleRejectConfirm = async () => {
+    if (!selectedUser || !rejectReason.trim()) return;
+    setRejectLoading(true);
+    setRejectError('');
+    try {
+      await updateApprovalStatus(selectedUser.id, 'rejected', rejectReason.trim());
+      setSelectedUser({ ...selectedUser, approval_status: 'rejected', rejected_reason: rejectReason.trim() });
+      setEditStatus('rejected');
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setRejectDialogOpen(false);
+      setSaveSuccess(true);
+    } catch (err) {
+      setRejectError(err instanceof Error ? err.message : '저장에 실패했습니다.');
+    } finally {
+      setRejectLoading(false);
+    }
+  };
+
   const detailRows: [string, string | number | boolean | undefined][] = selectedUser
     ? [
         ['ID', selectedUser.id],
@@ -993,6 +1068,8 @@ export default function UsersPage() {
         ['흡연', selectedUser.smoking],
         ['음주', selectedUser.drinking],
         ['종교', selectedUser.religion],
+        ['관심사', Array.isArray(selectedUser.interests) ? selectedUser.interests.join(', ') : selectedUser.interests],
+        ['스타일', Array.isArray(selectedUser.styles) ? selectedUser.styles.join(', ') : selectedUser.styles],
         ['키', selectedUser.height ? `${selectedUser.height}cm` : '-'],
         ['학력', selectedUser.education],
         ['학교명', selectedUser.school_name],
@@ -1233,9 +1310,14 @@ export default function UsersPage() {
       {selectedUser && (
         <ManualMatchModal
           open={matchModalOpen}
-          onClose={() => setMatchModalOpen(false)}
+          onClose={() => {
+            setMatchModalOpen(false);
+            setMatchModalApprovalMode(false);
+          }}
           userA={selectedUser}
           allUsers={data}
+          approvalMode={matchModalApprovalMode}
+          onApproveAfterMatch={handleApproveAfterMatch}
         />
       )}
 
@@ -1265,6 +1347,58 @@ export default function UsersPage() {
           </Button>
           <Button onClick={handleConfirm} variant="contained" autoFocus>
             확인
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 거절 사유 입력 Dialog */}
+      <Dialog
+        open={rejectDialogOpen}
+        onClose={() => !rejectLoading && setRejectDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 600 }}>거절 사유 입력</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            <strong>{selectedUser?.nickname}</strong> 님을 거절합니다.
+            거절 사유를 입력해주세요.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            label="거절 사유"
+            multiline
+            minRows={3}
+            maxRows={6}
+            fullWidth
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="거절 사유를 입력하세요..."
+            disabled={rejectLoading}
+          />
+          {rejectError && (
+            <Alert severity="error" sx={{ mt: 1.5 }}>
+              {rejectError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setRejectDialogOpen(false)}
+            variant="outlined"
+            color="inherit"
+            disabled={rejectLoading}
+          >
+            취소
+          </Button>
+          <Button
+            onClick={handleRejectConfirm}
+            variant="contained"
+            color="error"
+            disabled={!rejectReason.trim() || rejectLoading}
+            startIcon={rejectLoading ? <CircularProgress size={14} color="inherit" /> : undefined}
+          >
+            거절 확인
           </Button>
         </DialogActions>
       </Dialog>
