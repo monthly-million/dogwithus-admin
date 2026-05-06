@@ -255,23 +255,25 @@ export default function AnnouncementsPage() {
   return (
     <Box>
       {/* 헤더 */}
-      <Typography variant="h5" fontWeight={700} mb={3}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
         공지사항
       </Typography>
 
       {/* 필터 바 */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} spacing={2} mb={2}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' }, mb: 2 }}>
         <TextField
           size="small"
           placeholder="제목·내용 검색"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            },
           }}
           sx={{ minWidth: 240 }}
         />
@@ -340,7 +342,7 @@ export default function AnnouncementsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" fontWeight={item.is_pinned ? 700 : 400} noWrap sx={{ maxWidth: 360 }}>
+                      <Typography variant="body2" noWrap sx={{ fontWeight: item.is_pinned ? 700 : 400, maxWidth: 360 }}>
                         {item.title}
                       </Typography>
                     </TableCell>
@@ -364,7 +366,7 @@ export default function AnnouncementsPage() {
                       )}
                     </TableCell>
                     <TableCell align="center">
-                      <Stack direction="row" justifyContent="center" spacing={0.5}>
+                      <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center' }}>
                         <Tooltip title="수정">
                           <IconButton size="small" onClick={(e) => openEdit(item, e)}>
                             <EditIcon fontSize="small" />
@@ -404,7 +406,7 @@ export default function AnnouncementsPage() {
         anchor="right"
         open={Boolean(detailItem)}
         onClose={() => setDetailItem(null)}
-        PaperProps={{ sx: { width: { xs: '100vw', sm: 520 }, p: 0 } }}
+        slotProps={{ paper: { sx: { width: { xs: '100vw', sm: 520 }, p: 0 } } }}
       >
         {detailItem && (
           <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -420,7 +422,7 @@ export default function AnnouncementsPage() {
                 borderColor: 'divider',
               }}
             >
-              <Stack direction="row" spacing={1} alignItems="center">
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 {detailItem.is_pinned && <PushPinIcon fontSize="small" color="error" />}
                 <Chip
                   label={CATEGORY_META[detailItem.category].label}
@@ -448,11 +450,11 @@ export default function AnnouncementsPage() {
 
             {/* Drawer 본문 */}
             <Box sx={{ flex: 1, overflowY: 'auto', px: 3, py: 3 }}>
-              <Typography variant="h6" fontWeight={700} gutterBottom>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
                 {detailItem.title}
               </Typography>
 
-              <Stack direction="row" spacing={2} mb={3}>
+              <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
                 <Typography variant="caption" color="text.secondary">
                   게시일시: {dayjs(detailItem.published_at).format('YYYY-MM-DD HH:mm')}
                 </Typography>
@@ -492,7 +494,7 @@ export default function AnnouncementsPage() {
           {editTarget ? '공지 수정' : '새 공지 등록'}
         </DialogTitle>
         <DialogContent dividers>
-          <Stack spacing={2.5} pt={1}>
+          <Stack spacing={2.5} sx={{ pt: 1 }}>
             {formError && <Alert severity="error">{formError}</Alert>}
 
             <TextField
@@ -535,7 +537,7 @@ export default function AnnouncementsPage() {
                 value={form.published_at}
                 onChange={(e) => setForm({ ...form, published_at: e.target.value })}
                 size="small"
-                InputLabelProps={{ shrink: true }}
+                slotProps={{ inputLabel: { shrink: true } }}
                 sx={{ flex: 1 }}
               />
             </Stack>
@@ -569,7 +571,7 @@ export default function AnnouncementsPage() {
 
       {/* ─── 삭제 확인 Dialog ────────────────────────────────────────────────── */}
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle fontWeight={700}>공지 삭제</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>공지 삭제</DialogTitle>
         <DialogContent>
           <Typography>
             <strong>"{deleteTarget?.title}"</strong> 공지사항을 삭제하시겠습니까?<br />

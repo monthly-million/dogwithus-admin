@@ -157,8 +157,10 @@ function InquiryDetailDrawer({ inquiry, onClose }: InquiryDetailDrawerProps) {
       anchor="right"
       open={isOpen}
       onClose={onClose}
-      SlideProps={{ onEntered: handleDrawerEntered }}
-      PaperProps={{ sx: { width: { xs: '100%', sm: 520 }, p: 0 } }}
+      slotProps={{
+        paper: { sx: { width: { xs: '100%', sm: 520 }, p: 0 } },
+        transition: { onEntered: handleDrawerEntered },
+      }}
     >
       {inquiry && (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -187,12 +189,12 @@ function InquiryDetailDrawer({ inquiry, onClose }: InquiryDetailDrawerProps) {
           {/* 본문 */}
           <Box sx={{ flex: 1, overflowY: 'auto', px: 3, py: 2 }}>
             {/* 작성자 */}
-            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 2 }}>
               <Avatar sx={{ bgcolor: 'primary.main', width: 40, height: 40 }}>
                 <PersonIcon />
               </Avatar>
               <Box>
-                <Typography variant="subtitle2" fontWeight={700}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                   {user?.nickname ?? '알 수 없음'}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
@@ -204,7 +206,7 @@ function InquiryDetailDrawer({ inquiry, onClose }: InquiryDetailDrawerProps) {
             <Divider sx={{ mb: 2 }} />
 
             {/* 메타 정보 */}
-            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mb: 2 }}>
               <Chip
                 label={CATEGORY_LABELS[inquiry.category]}
                 color={CATEGORY_COLORS[inquiry.category]}
@@ -224,8 +226,7 @@ function InquiryDetailDrawer({ inquiry, onClose }: InquiryDetailDrawerProps) {
             </Typography>
             <Typography
               variant="subtitle1"
-              fontWeight={600}
-              sx={{ mb: 2, wordBreak: 'break-word' }}
+              sx={{ fontWeight: 600, mb: 2, wordBreak: 'break-word' }}
             >
               {inquiry.subject}
             </Typography>
@@ -274,7 +275,7 @@ function InquiryDetailDrawer({ inquiry, onClose }: InquiryDetailDrawerProps) {
             <Divider sx={{ mb: 2 }} />
 
             {/* 관리자 처리 */}
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
               관리자 처리
             </Typography>
 
@@ -290,7 +291,7 @@ function InquiryDetailDrawer({ inquiry, onClose }: InquiryDetailDrawerProps) {
               >
                 {STATUS_OPTIONS.map((s) => (
                   <MenuItem key={s} value={s}>
-                    <Stack direction="row" alignItems="center" spacing={1}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                       <Chip
                         label={STATUS_LABELS[s]}
                         color={STATUS_COLORS[s]}
@@ -463,9 +464,9 @@ export default function InquiriesPage() {
   return (
     <Box>
       {/* 헤더 */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
+      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight={700}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
             문의 관리
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -482,12 +483,14 @@ export default function InquiriesPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{ minWidth: 220 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            },
           }}
         />
         <FormControl size="small" sx={{ minWidth: 130 }}>
@@ -550,9 +553,6 @@ export default function InquiriesPage() {
           }}
           localeText={{
             noRowsLabel: '문의 내역이 없습니다.',
-            MuiTablePagination: {
-              labelRowsPerPage: '페이지당 행 수',
-            },
           }}
         />
       </Box>

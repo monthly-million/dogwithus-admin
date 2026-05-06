@@ -1112,7 +1112,11 @@ export default function UsersPage() {
         suspended_reason: editSuspendedReason.trim() || null,
       };
       await updateSuspension(selectedUser.id, payload);
-      const updated = { ...selectedUser, ...payload };
+      const updated = {
+        ...selectedUser,
+        ...payload,
+        suspended_reason: editSuspendedReason.trim() || undefined,
+      };
       setSelectedUser(updated);
       await queryClient.invalidateQueries({ queryKey: ['users'] });
       setSuspendSuccess(true);

@@ -125,7 +125,7 @@ function UserProfileModal({
       </DialogTitle>
       <DialogContent dividers>
         {isLoading && (
-          <Box display="flex" justifyContent="center" py={4}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress />
           </Box>
         )}
@@ -137,11 +137,11 @@ function UserProfileModal({
             {/* 프로필 사진 */}
             {(user.profile_photos?.length ?? 0) > 0 && (
               <Box>
-                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                   프로필 사진
                 </Typography>
                 {photosLoading ? (
-                  <Box display="flex" gap={1} mt={1}>
+                  <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                     {user.profile_photos?.map((_, i) => (
                       <Skeleton key={i} variant="rectangular" width={80} height={80} sx={{ borderRadius: 2 }} />
                     ))}
@@ -166,7 +166,7 @@ function UserProfileModal({
 
             {/* 기본 정보 */}
             <Box>
-              <Typography variant="caption" color="text.secondary" fontWeight={600} gutterBottom display="block">
+              <Typography variant="caption" color="text.secondary" gutterBottom sx={{ fontWeight: 600, display: 'block' }}>
                 기본 정보
               </Typography>
               <Stack spacing={0.75}>
@@ -184,7 +184,7 @@ function UserProfileModal({
 
             {/* 라이프스타일 */}
             <Box>
-              <Typography variant="caption" color="text.secondary" fontWeight={600} gutterBottom display="block">
+              <Typography variant="caption" color="text.secondary" gutterBottom sx={{ fontWeight: 600, display: 'block' }}>
                 라이프스타일
               </Typography>
               <Stack spacing={0.75}>
@@ -194,7 +194,7 @@ function UserProfileModal({
                 <InfoRow label="직업" value={user.job} />
                 <InfoRow label="학력" value={user.education} />
                 {user.interests && user.interests.length > 0 && (
-                  <Box display="flex" gap={0.5} flexWrap="wrap" alignItems="center">
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
                     <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>관심사</Typography>
                     {user.interests.map((v) => <Chip key={v} label={v} size="small" />)}
                   </Box>
@@ -206,7 +206,7 @@ function UserProfileModal({
 
             {/* 계정 정보 */}
             <Box>
-              <Typography variant="caption" color="text.secondary" fontWeight={600} gutterBottom display="block">
+              <Typography variant="caption" color="text.secondary" gutterBottom sx={{ fontWeight: 600, display: 'block' }}>
                 계정 정보
               </Typography>
               <Stack spacing={0.75}>
@@ -217,7 +217,7 @@ function UserProfileModal({
                     size="small"
                   />
                 </InfoRow>
-                <InfoRow label="캔디 잔액" value={user.candy_balance != null ? `${user.candy_balance}개` : undefined} />
+                <InfoRow label="캔디 잔액" value={user.cookie_balance != null ? `${user.cookie_balance}개` : undefined} />
                 <InfoRow label="가입일" value={dayjs(user.created_at).format('YYYY-MM-DD HH:mm')} />
                 <InfoRow label="ID" value={user.id} mono />
               </Stack>
@@ -227,7 +227,7 @@ function UserProfileModal({
               <>
                 <Divider />
                 <Box>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} gutterBottom display="block">
+                  <Typography variant="caption" color="text.secondary" gutterBottom sx={{ fontWeight: 600, display: 'block' }}>
                     자기소개
                   </Typography>
                   <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{user.bio}</Typography>
@@ -254,7 +254,7 @@ function InfoRow({
 }) {
   if (!children && (value === undefined || value === null || value === '')) return null;
   return (
-    <Box display="flex" alignItems="flex-start" gap={1}>
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
       <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80, flexShrink: 0 }}>
         {label}
       </Typography>
@@ -373,27 +373,29 @@ export default function ReportsPage() {
   return (
     <Box>
       {/* 헤더 */}
-      <Box display="flex" alignItems="center" gap={1.5} mb={3}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
         <ReportIcon sx={{ color: 'error.main', fontSize: 28 }} />
-        <Typography variant="h5" fontWeight={700}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
           신고 내역
         </Typography>
         <Chip label={`총 ${reports.length}건`} size="small" color="error" variant="outlined" />
       </Box>
 
       {/* 검색 */}
-      <Box mb={2}>
+      <Box sx={{ mb: 2 }}>
         <TextField
           size="small"
           placeholder="신고 사유, 유저 ID 검색…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            },
           }}
           sx={{ width: 320 }}
         />
