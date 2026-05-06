@@ -501,7 +501,7 @@ export default function AnnouncementsPage() {
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               fullWidth
               required
-              inputProps={{ maxLength: 200 }}
+              slotProps={{ htmlInput: { maxLength: 200 } }}
             />
 
             <TextField

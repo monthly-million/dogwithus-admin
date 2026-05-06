@@ -136,6 +136,27 @@ export interface Report {
   created_at: string;
 }
 
+export type PurchaseStatus = 'pending' | 'verified' | 'granted' | 'refunded' | 'failed' | 'canceled';
+export type PurchaseStore = 'app_store' | 'play_store' | 'promo' | 'grant';
+
+export interface Purchase {
+  id: string;
+  user_id: string;
+  store: PurchaseStore;
+  product_id: string;
+  transaction_id: string | null;
+  original_transaction_id: string | null;
+  receipt_data: string | null;
+  amount_krw: number;
+  cookie_amount: number;
+  cookie_transaction_id: string | null;
+  status: PurchaseStatus;
+  failure_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  verified_at: string | null;
+}
+
 export type InquiryCategory = 'general' | 'account' | 'payment' | 'bug' | 'report' | 'other';
 export type InquiryStatus = 'open' | 'in_progress' | 'answered' | 'closed';
 
