@@ -81,6 +81,25 @@ export interface Match {
   created_at: string;
 }
 
+export type IntroSource = 'daily_free' | 'daily_extra' | 'admin_manual';
+export type IntroStatus =
+  | 'active'
+  | 'signal_sent'
+  | 'rejected'
+  | 'matched'
+  | 'partner_deleted';
+
+export interface Intro {
+  id: string;
+  receiver_id: string;
+  card_profile_id: string;
+  source: IntroSource;
+  status: IntroStatus;
+  signal_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ChatRoom {
   id: string;
   match_id?: string;

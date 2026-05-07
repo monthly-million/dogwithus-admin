@@ -52,7 +52,7 @@ import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, supabaseAdmin } from '../api/supabaseClient';
-import type { User, Match, BlockedContact } from '../types/database';
+import type { User, BlockedContact } from '../types/database';
 import dayjs from 'dayjs';
 
 const PHOTO_BUCKET = 'profile-photos';
@@ -104,13 +104,14 @@ async function updateApprovalStatus(userId: string, status: ApprovalStatus, reje
   if (error) throw new Error(error.message ?? JSON.stringify(error));
 }
 
-async function fetchMatchesForUser(userId: string): Promise<Match[]> {
+/** receiver에게 이미 소개된 카드 프로필 ID (intros, 모든 status — 유니크 제약과 동일하게 중복 소개 방지) */
+async function fetchIntroCardIdsForReceiver(receiverId: string): Promise<string[]> {
   const { data, error } = await supabase
-    .from('matches')
-    .select('*')
-    .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+    .from('intros')
+    .select('card_profile_id')
+    .eq('receiver_id', receiverId);
   if (error) throw error;
-  return (data ?? []) as Match[];
+  return (data ?? []).map((row: { card_profile_id: string }) => row.card_profile_id);
 }
 
 async function updateSuspension(
@@ -121,9 +122,13 @@ async function updateSuspension(
   if (error) throw new Error(error.message ?? JSON.stringify(error));
 }
 
-async function createMatches(user1Id: string, user2Ids: string[]) {
-  const inserts = user2Ids.map((id) => ({ user1_id: user1Id, user2_id: id }));
-  const { error } = await supabaseAdmin.from('matches').insert(inserts);
+async function createAdminManualIntros(receiverId: string, cardProfileIds: string[]) {
+  const inserts = cardProfileIds.map((card_profile_id) => ({
+    receiver_id: receiverId,
+    card_profile_id,
+    source: 'admin_manual' as const,
+  }));
+  const { error } = await supabaseAdmin.from('intros').insert(inserts);
   if (error) throw error;
 }
 
@@ -460,9 +465,9 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
   const [lightboxUser, setLightboxUser] = useState<User | null>(null);
   const [sortAnchorEl, setSortAnchorEl] = useState<HTMLElement | null>(null);
 
-  const { data: existingMatches = [], isLoading: matchesLoading } = useQuery({
-    queryKey: ['matches-for-user', userA.id],
-    queryFn: () => fetchMatchesForUser(userA.id),
+  const { data: existingIntroCardIds = [], isLoading: introsLoading } = useQuery({
+    queryKey: ['intros-card-ids-for-receiver', userA.id],
+    queryFn: () => fetchIntroCardIdsForReceiver(userA.id),
     enabled: open,
   });
 
@@ -472,11 +477,7 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
     enabled: open,
   });
 
-  const matchedIds = useMemo(() => {
-    return new Set(
-      existingMatches.map((m) => (m.user1_id === userA.id ? m.user2_id : m.user1_id))
-    );
-  }, [existingMatches, userA.id]);
+  const matchedIds = useMemo(() => new Set(existingIntroCardIds), [existingIntroCardIds]);
 
   const blockedIdsSet = useMemo(() => {
     if (!blockedContacts) return new Set<string>();
@@ -490,7 +491,7 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
   }, [blockedContacts, allUsers]);
 
   const candidates = useMemo(() => {
-    if (matchesLoading || blockedLoading) return [];
+    if (introsLoading || blockedLoading) return [];
     const filtered = allUsers.filter((u) => {
       if (u.id === userA.id) return false;
       if (matchedIds.has(u.id)) return false;
@@ -500,7 +501,7 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
       return true;
     });
     return sortCandidates(userA, filtered);
-  }, [allUsers, userA, matchedIds, blockedIdsSet, matchesLoading, blockedLoading]);
+  }, [allUsers, userA, matchedIds, blockedIdsSet, introsLoading, blockedLoading]);
 
   // 유저 A 첫 번째 사진 signed URL
   const userAFirstPhoto = userA.profile_photos?.[0];
@@ -556,8 +557,8 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
     setMatchError('');
     setMatchSuccess(false);
     try {
-      await createMatches(userA.id, selectedIds);
-      await queryClient.invalidateQueries({ queryKey: ['matches-for-user', userA.id] });
+      await createAdminManualIntros(userA.id, selectedIds);
+      await queryClient.invalidateQueries({ queryKey: ['intros-card-ids-for-receiver', userA.id] });
       if (approvalMode && onApproveAfterMatch) {
         await onApproveAfterMatch();
         handleClose();
@@ -662,8 +663,9 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
             {[
               {
                 num: '1',
-                primary: '이미 매칭된 상대 제외',
-                secondary: 'matches 테이블에서 이미 매칭된 유저는 목록에서 제외됩니다.',
+                primary: '이미 소개된 카드 제외',
+                secondary:
+                  'intros 테이블에서 해당 수신자(receiver)에게 이미 소개된 카드 프로필은 목록에서 제외됩니다.',
                 color: '#e53935',
               },
               {
@@ -790,7 +792,7 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
             </TableHead>
 
             <TableBody>
-              {matchesLoading ? (
+              {introsLoading ? (
                 <TableRow>
                   <TableCell colSpan={MATCH_COLUMNS.length + 1} align="center" sx={{ py: 6 }}>
                     <CircularProgress size={28} />
