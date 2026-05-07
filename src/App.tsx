@@ -13,6 +13,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
 import DogsPage from './pages/DogsPage';
+import IntrosPage from './pages/IntrosPage';
 import SignalsPage from './pages/SignalsPage';
 import MatchesPage from './pages/MatchesPage';
 import ChatRoomsPage from './pages/ChatRoomsPage';
@@ -76,6 +77,7 @@ export default function App() {
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="profiles" element={<UsersPage />} />
               <Route path="dogs" element={<DogsPage />} />
+              <Route path="intros" element={<IntrosPage />} />
               <Route path="signals" element={<SignalsPage />} />
               <Route path="matches" element={<MatchesPage />} />
               <Route path="chat-rooms" element={<ChatRoomsPage />} />
