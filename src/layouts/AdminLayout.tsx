@@ -28,6 +28,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import PetsIcon from '@mui/icons-material/Pets';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import ConnectWithoutContactIcon from '@mui/icons-material/ConnectWithoutContact';
+import StyleIcon from '@mui/icons-material/Style';
 import ChatIcon from '@mui/icons-material/Chat';
 import MessageIcon from '@mui/icons-material/Message';
 import CandyIcon from '@mui/icons-material/Cake';
@@ -48,6 +49,7 @@ const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
   { label: 'Profiles', path: '/profiles', icon: <PeopleIcon /> },
   { label: 'Dogs', path: '/dogs', icon: <PetsIcon /> },
+  { label: 'Intros', path: '/intros', icon: <StyleIcon /> },
   { label: 'Signals', path: '/signals', icon: <ConnectWithoutContactIcon /> },
   { label: 'Matches', path: '/matches', icon: <FavoriteIcon /> },
   { label: 'Chat Rooms', path: '/chat-rooms', icon: <ChatIcon /> },
