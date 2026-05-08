@@ -155,25 +155,6 @@ export interface Report {
   created_at: string;
 }
 
-export type IntroSource = 'daily_free' | 'daily_extra';
-export type IntroStatus =
-  | 'active'
-  | 'signal_sent'
-  | 'matched'
-  | 'rejected'
-  | 'partner_deleted';
-
-export interface Intro {
-  id: string;
-  receiver_id: string;
-  card_profile_id: string;
-  source: IntroSource | string;
-  status: IntroStatus | string;
-  signal_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export type PurchaseStatus = 'pending' | 'verified' | 'granted' | 'refunded' | 'failed' | 'canceled';
 export type PurchaseStore = 'app_store' | 'play_store' | 'promo' | 'grant';
 
