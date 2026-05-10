@@ -583,8 +583,7 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
   };
 
   const handleMatch = async () => {
-    const minRequired = approvalMode ? 2 : 1;
-    if (selectedIds.length < minRequired || (approvalMode && selectedIds.length !== 2) || matching) return;
+    if (selectedIds.length === 0 || matching) return;
     setMatching(true);
     setMatchError('');
     setMatchSuccess(false);
@@ -910,11 +909,14 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
       />
 
       <DialogActions sx={{ px: 3, py: 2, justifyContent: 'space-between', borderTop: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="body2" color={approvalMode && selectedIds.length !== 2 ? 'warning.main' : 'text.secondary'}>
+        <Typography
+          variant="body2"
+          color={approvalMode && selectedIds.length === 0 ? 'warning.main' : 'text.secondary'}
+        >
           {approvalMode
-            ? selectedIds.length === 2
-              ? '2명 선택됨 · 매칭 후 승인됩니다'
-              : `${selectedIds.length}/2명 선택 (승인을 위해 정확히 2명 필수)`
+            ? selectedIds.length === 0
+              ? '승인을 위해 최소 1명 이상 선택해 주세요 (최대 2명)'
+              : `${selectedIds.length}명 선택됨 · 매칭 후 승인됩니다 (최대 2명)`
             : selectedIds.length > 0
               ? `${selectedIds.length}명 선택됨 (최대 2명)`
               : '매칭할 사람의 행을 클릭하여 선택하세요 (최대 2명)'}
@@ -927,7 +929,7 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
             onClick={handleMatch}
             variant="contained"
             color={approvalMode ? 'success' : 'primary'}
-            disabled={(approvalMode ? selectedIds.length !== 2 : selectedIds.length === 0) || matching}
+            disabled={selectedIds.length === 0 || matching}
             startIcon={
               matching ? <CircularProgress size={14} color="inherit" /> : <FavoriteIcon />
             }
@@ -945,7 +947,6 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
 const columns: GridColDef[] = [
   { field: 'id', headerName: 'ID', width: 100, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
   { field: 'nickname', headerName: '닉네임', width: 130 },
-  { field: 'phone', headerName: '전화번호', width: 130 },
   { field: 'gender', headerName: '성별', width: 80 },
   { field: 'age', headerName: '나이', width: 70, type: 'number' },
   { field: 'birth_date', headerName: '생년월일', width: 120 },
