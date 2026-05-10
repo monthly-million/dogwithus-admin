@@ -48,17 +48,20 @@ export interface BlockedContact {
   created_at: string;
 }
 
+/** public.dogs — 한 owner당 1행 (owner_id unique) */
 export interface Dog {
   id: string;
+  created_at: string;
   owner_id: string;
   name: string;
-  breed?: string;
-  age?: number;
-  gender?: string;
-  size?: string;
-  personalities?: string[];
-  walk_styles?: string[];
-  created_at: string;
+  breed?: string | null;
+  age?: number | null;
+  gender?: string | null;
+  size?: string | null;
+  personalities?: string[] | null;
+  walk_styles?: string[] | null;
+  description?: string | null;
+  photos?: string[] | null;
 }
 
 export interface Signal {

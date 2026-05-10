@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Box,
   Typography,
@@ -9,14 +9,21 @@ import {
   Stack,
   Divider,
   Chip,
+  ImageList,
+  ImageListItem,
+  Skeleton,
 } from '@mui/material';
 import { DataGrid, type GridColDef } from '@mui/x-data-grid';
 import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../api/supabaseClient';
+import { fetchSignedDogPhotoUrls } from '../lib/signedStorageUrls';
 import type { Dog } from '../types/database';
 import dayjs from 'dayjs';
+
+const PHOTO_BUCKET = 'profile-photos';
+const DOG_PHOTO_BUCKET = 'dog-photos';
 
 async function fetchDogs() {
   const { data, error } = await supabase
@@ -76,6 +83,17 @@ export default function DogsPage() {
   const { data = [], isLoading } = useQuery({
     queryKey: ['dogs'],
     queryFn: fetchDogs,
+  });
+
+  const photoPaths = useMemo(
+    () => (selected?.photos ?? []).filter((p): p is string => Boolean(p?.trim())),
+    [selected?.photos],
+  );
+
+  const { data: signedDogUrls = [], isLoading: dogPhotosLoading } = useQuery({
+    queryKey: ['dogs-drawer-photos', selected?.id, photoPaths.join('\0')],
+    queryFn: () => fetchSignedDogPhotoUrls(photoPaths, DOG_PHOTO_BUCKET, PHOTO_BUCKET),
+    enabled: Boolean(selected) && photoPaths.length > 0,
   });
 
   const filtered = data.filter(
@@ -140,6 +158,43 @@ export default function DogsPage() {
         <Divider sx={{ mb: 2 }} />
         {selected && (
           <Stack spacing={1.5}>
+            {photoPaths.length > 0 && (
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  강아지 사진
+                </Typography>
+                {dogPhotosLoading ? (
+                  <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                    {photoPaths.map((_, i) => (
+                      <Skeleton key={i} variant="rectangular" width={72} height={72} sx={{ borderRadius: 2 }} />
+                    ))}
+                  </Box>
+                ) : (
+                  <ImageList cols={3} gap={8} sx={{ mt: 1, mb: 0 }}>
+                    {signedDogUrls.map((url, idx) => (
+                      <ImageListItem key={idx}>
+                        <img
+                          src={url}
+                          alt={`${selected.name}-${idx}`}
+                          style={{ borderRadius: 8, width: '100%', aspectRatio: '1', objectFit: 'cover' }}
+                        />
+                      </ImageListItem>
+                    ))}
+                  </ImageList>
+                )}
+              </Box>
+            )}
+            {selected.description?.trim() && (
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  소개 (description)
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
+                  {selected.description.trim()}
+                </Typography>
+              </Box>
+            )}
+            <Divider />
             {(
               [
                 ['ID', selected.id],

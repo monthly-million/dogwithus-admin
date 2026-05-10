@@ -52,6 +52,7 @@ import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, supabaseAdmin } from '../api/supabaseClient';
+import { fetchSignedUrlsForRefs } from '../lib/signedStorageUrls';
 import type { User, BlockedContact } from '../types/database';
 import dayjs from 'dayjs';
 
@@ -193,30 +194,8 @@ async function fetchBlockedContactsForMatch(
 
 // ─── Photo helpers ────────────────────────────────────────────────────────────
 
-function extractStoragePath(value: string): string {
-  try {
-    const url = new URL(value);
-    const match = url.pathname.match(/\/object\/(?:public|sign)\/[^/]+\/(.+)/);
-    if (match) return match[1];
-    const match2 = url.pathname.match(/\/object\/authenticated\/[^/]+\/(.+)/);
-    if (match2) return match2[1];
-    return url.pathname.split('/').slice(-1)[0];
-  } catch {
-    return value;
-  }
-}
-
 async function fetchSignedPhotoUrls(rawValues: string[]) {
-  if (!rawValues || rawValues.length === 0) return [];
-  const paths = rawValues.map(extractStoragePath);
-  const { data, error } = await supabase.storage
-    .from(PHOTO_BUCKET)
-    .createSignedUrls(paths, 60 * 60);
-  if (error) {
-    console.error('[Profile Photos] Signed URL 발급 실패:', error);
-    throw error;
-  }
-  return data?.map((item) => item.signedUrl).filter(Boolean) as string[];
+  return fetchSignedUrlsForRefs(rawValues, PHOTO_BUCKET);
 }
 
 // ─── Sorting utilities ────────────────────────────────────────────────────────
@@ -541,9 +520,8 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
     queryKey: ['single-photo', userAFirstPhoto],
     queryFn: async () => {
       if (!userAFirstPhoto) return null;
-      const path = extractStoragePath(userAFirstPhoto);
-      const { data } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(path, 3600);
-      return data?.signedUrl ?? null;
+      const urls = await fetchSignedUrlsForRefs([userAFirstPhoto], PHOTO_BUCKET);
+      return urls[0] ?? null;
     },
     enabled: Boolean(userAFirstPhoto) && open,
     staleTime: 1000 * 60 * 50,
@@ -559,14 +537,10 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
     queryKey: ['candidate-photos', firstPhotoPaths.slice().sort().join(',')],
     queryFn: async () => {
       if (firstPhotoPaths.length === 0) return {};
-      const paths = firstPhotoPaths.map(extractStoragePath);
-      const { data, error } = await supabase.storage
-        .from(PHOTO_BUCKET)
-        .createSignedUrls(paths, 3600);
-      if (error || !data) return {};
+      const urls = await fetchSignedUrlsForRefs(firstPhotoPaths, PHOTO_BUCKET);
       const map: Record<string, string> = {};
       firstPhotoPaths.forEach((originalPath, idx) => {
-        if (data[idx]?.signedUrl) map[originalPath] = data[idx].signedUrl;
+        if (urls[idx]) map[originalPath] = urls[idx];
       });
       return map;
     },

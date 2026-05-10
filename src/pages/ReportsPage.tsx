@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Box,
   Typography,
@@ -23,13 +23,16 @@ import { DataGrid, type GridColDef, type GridRenderCellParams } from '@mui/x-dat
 import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import PersonIcon from '@mui/icons-material/Person';
+import PetsIcon from '@mui/icons-material/Pets';
 import ReportIcon from '@mui/icons-material/Report';
 import { useQuery } from '@tanstack/react-query';
 import { supabase, supabaseAdmin } from '../api/supabaseClient';
-import type { Report, User } from '../types/database';
+import { fetchSignedDogPhotoUrls, fetchSignedUrlsForRefs } from '../lib/signedStorageUrls';
+import type { Dog, Report, User } from '../types/database';
 import dayjs from 'dayjs';
 
 const PHOTO_BUCKET = 'profile-photos';
+const DOG_PHOTO_BUCKET = 'dog-photos';
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
@@ -52,27 +55,23 @@ async function fetchUserById(userId: string): Promise<User> {
   return data as User;
 }
 
-function extractStoragePath(value: string): string {
-  try {
-    const url = new URL(value);
-    const match = url.pathname.match(/\/object\/(?:public|sign)\/[^/]+\/(.+)/);
-    if (match) return match[1];
-    const match2 = url.pathname.match(/\/object\/authenticated\/[^/]+\/(.+)/);
-    if (match2) return match2[1];
-    return url.pathname.split('/').slice(-1)[0];
-  } catch {
-    return value;
-  }
+async function fetchDogsByOwnerId(ownerId: string): Promise<Dog[]> {
+  const { data, error } = await supabase
+    .from('dogs')
+    .select('*')
+    .eq('owner_id', ownerId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Dog[];
 }
 
-async function fetchSignedPhotoUrls(rawValues: string[]): Promise<string[]> {
-  if (!rawValues || rawValues.length === 0) return [];
-  const paths = rawValues.map(extractStoragePath);
-  const { data, error } = await supabase.storage
-    .from(PHOTO_BUCKET)
-    .createSignedUrls(paths, 60 * 60);
-  if (error) return [];
-  return data?.map((item) => item.signedUrl).filter(Boolean) as string[];
+function dogPhotoPaths(dog: Dog): string[] {
+  return (dog.photos ?? []).filter((p): p is string => Boolean(p?.trim()));
+}
+
+function dogDescription(dog: Dog): string | undefined {
+  const t = dog.description?.trim();
+  return t || undefined;
 }
 
 // ─── UserProfileModal ─────────────────────────────────────────────────────────
@@ -96,9 +95,37 @@ function UserProfileModal({
 
   const { data: photoUrls, isLoading: photosLoading } = useQuery({
     queryKey: ['profile-photos', userId, user?.profile_photos],
-    queryFn: () => fetchSignedPhotoUrls(user?.profile_photos ?? []),
+    queryFn: () => fetchSignedUrlsForRefs(user?.profile_photos ?? [], PHOTO_BUCKET),
     enabled: open && !!user && (user.profile_photos?.length ?? 0) > 0,
   });
+
+  const {
+    data: dogs = [],
+    isLoading: dogsLoading,
+    isError: dogsIsError,
+  } = useQuery({
+    queryKey: ['dogs-by-owner', userId],
+    queryFn: () => fetchDogsByOwnerId(userId),
+    enabled: open && !!userId,
+  });
+
+  const dogPhotoPathsGrouped = useMemo(() => dogs.map(dogPhotoPaths), [dogs]);
+  const allDogPhotoPathsFlat = useMemo(() => dogPhotoPathsGrouped.flat(), [dogPhotoPathsGrouped]);
+
+  const { data: dogSignedUrls = [], isLoading: dogPhotosLoading } = useQuery({
+    queryKey: ['report-modal-dog-photos', userId, allDogPhotoPathsFlat.join('\0')],
+    queryFn: () => fetchSignedDogPhotoUrls(allDogPhotoPathsFlat, DOG_PHOTO_BUCKET, PHOTO_BUCKET),
+    enabled: open && allDogPhotoPathsFlat.length > 0,
+  });
+
+  const dogPhotoUrlsByDog = useMemo(() => {
+    let offset = 0;
+    return dogPhotoPathsGrouped.map((paths) => {
+      const slice = dogSignedUrls.slice(offset, offset + paths.length);
+      offset += paths.length;
+      return slice;
+    });
+  }, [dogPhotoPathsGrouped, dogSignedUrls]);
 
   const approvalColor = (status?: string) => {
     if (status === 'approved') return 'success';
@@ -161,6 +188,91 @@ function UserProfileModal({
                 )}
               </Box>
             )}
+
+            <Divider />
+
+            {/* 강아지 (신고 맥락: 사진·소개 확인) */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <PetsIcon sx={{ fontSize: 16 }} />
+                강아지
+              </Typography>
+              {dogsLoading && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                  <CircularProgress size={28} />
+                </Box>
+              )}
+              {dogsIsError && (
+                <Alert severity="warning" sx={{ mt: 1 }}>
+                  강아지 정보를 불러오지 못했습니다.
+                </Alert>
+              )}
+              {!dogsLoading && !dogsIsError && dogs.length === 0 && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  등록된 강아지가 없습니다.
+                </Typography>
+              )}
+              {!dogsLoading && !dogsIsError &&
+                dogs.map((dog, dogIdx) => {
+                  const paths = dogPhotoPathsGrouped[dogIdx] ?? [];
+                  const urls = dogPhotoUrlsByDog[dogIdx] ?? [];
+                  const intro = dogDescription(dog);
+                  return (
+                    <Box key={dog.id} sx={{ mt: dogIdx === 0 ? 1.5 : 2, pt: dogIdx > 0 ? 2 : 0, borderTop: dogIdx > 0 ? '1px solid' : undefined, borderColor: 'divider' }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                        {dog.name}
+                        {(dog.breed || dog.age != null) && (
+                          <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1, fontWeight: 400 }}>
+                            {[dog.breed, dog.age != null ? `${dog.age}세` : null].filter(Boolean).join(' · ')}
+                          </Typography>
+                        )}
+                      </Typography>
+                      {paths.length > 0 && (
+                        <Box sx={{ mb: intro ? 1.5 : 0 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                            강아지 사진
+                          </Typography>
+                          {dogPhotosLoading ? (
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              {paths.map((_, i) => (
+                                <Skeleton key={i} variant="rectangular" width={80} height={80} sx={{ borderRadius: 2 }} />
+                              ))}
+                            </Box>
+                          ) : (
+                            <ImageList cols={4} gap={8} sx={{ m: 0 }}>
+                              {urls.map((url, idx) => (
+                                <ImageListItem key={`${dog.id}-${idx}`}>
+                                  <img
+                                    src={url}
+                                    alt={`${dog.name}-${idx}`}
+                                    style={{ borderRadius: 8, width: '100%', aspectRatio: '1', objectFit: 'cover' }}
+                                  />
+                                </ImageListItem>
+                              ))}
+                            </ImageList>
+                          )}
+                        </Box>
+                      )}
+                      {intro ? (
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                            강아지 소개
+                          </Typography>
+                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                            {intro}
+                          </Typography>
+                        </Box>
+                      ) : (
+                        paths.length === 0 && (
+                          <Typography variant="body2" color="text.secondary">
+                            등록된 강아지 사진·소개가 없습니다.
+                          </Typography>
+                        )
+                      )}
+                    </Box>
+                  );
+                })}
+            </Box>
 
             <Divider />
 
