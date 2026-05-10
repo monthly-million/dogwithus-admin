@@ -494,6 +494,7 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
     if (introsLoading || blockedLoading) return [];
     const filtered = allUsers.filter((u) => {
       if (u.id === userA.id) return false;
+      if (u.approval_status !== 'approved') return false;
       if (matchedIds.has(u.id)) return false;
       if (blockedIdsSet.has(u.id)) return false;
       // 이성만 표시 (성별 정보가 있는 경우에만 필터링)
