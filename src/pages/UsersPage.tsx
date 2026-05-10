@@ -132,27 +132,56 @@ async function createAdminManualIntros(receiverId: string, cardProfileIds: strin
   if (error) throw error;
 }
 
+/** 비교용: 국내 0으로 시작하는 숫자열로 통일 (82… → 0…) */
+function phoneMatchKey(phone?: string | null): string {
+  if (!phone) return '';
+  const d = phone.replace(/\D/g, '');
+  if (d.startsWith('82') && d.length >= 10) return `0${d.slice(2)}`;
+  return d;
+}
+
+/** DB·입력 형식 차이를 고려해 blocked_contacts.phone 조회에 쓸 후보 문자열 */
+function phoneKeyVariants(phone?: string): string[] {
+  if (!phone?.trim()) return [];
+  const t = phone.trim();
+  const digits = t.replace(/\D/g, '');
+  const variants = new Set<string>([t]);
+  if (digits) variants.add(digits);
+  const local0 = phoneMatchKey(phone);
+  if (local0) {
+    variants.add(local0);
+    if (local0.startsWith('0') && local0.length === 11) {
+      variants.add(`${local0.slice(0, 3)}-${local0.slice(3, 7)}-${local0.slice(7)}`);
+    }
+  }
+  return [...variants].filter(Boolean);
+}
+
 /**
  * userA가 차단한 전화번호 목록과 userA의 전화번호를 차단한 유저 ID 목록을 반환합니다.
  * - blockedPhones: userA(owner_id)가 등록한 차단 번호 → 해당 번호를 가진 유저 제외
  * - blockedByOwnerIds: userA의 전화번호를 등록한 owner_id → 해당 유저 제외
+ *
+ * 관리자 화면에서 임의 유저 A 기준이므로 service 클라이언트로 조회합니다(RLS 우회).
  */
 async function fetchBlockedContactsForMatch(
   userId: string,
   userPhone?: string,
 ): Promise<{ blockedPhones: string[]; blockedByOwnerIds: string[] }> {
+  const phoneVariants = phoneKeyVariants(userPhone);
+
   const [byMeResult, byOthersResult] = await Promise.all([
-    supabase
+    supabaseAdmin
       .from('blocked_contacts')
       .select('phone')
       .eq('owner_id', userId),
-    userPhone
-      ? supabase
-          .from('blocked_contacts')
-          .select('owner_id')
-          .eq('phone', userPhone)
+    phoneVariants.length > 0
+      ? supabaseAdmin.from('blocked_contacts').select('owner_id').in('phone', phoneVariants)
       : Promise.resolve({ data: [] as Pick<BlockedContact, 'owner_id'>[], error: null }),
   ]);
+
+  if (byMeResult.error) throw byMeResult.error;
+  if (byOthersResult.error) throw byOthersResult.error;
 
   const blockedPhones = (byMeResult.data ?? []).map((r) => (r as Pick<BlockedContact, 'phone'>).phone);
   const blockedByOwnerIds = (byOthersResult.data ?? []).map(
@@ -483,9 +512,11 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
     if (!blockedContacts) return new Set<string>();
     const { blockedPhones, blockedByOwnerIds } = blockedContacts;
     const ids = new Set<string>(blockedByOwnerIds);
-    // 차단된 전화번호를 가진 유저 ID 추가
+    const blockedKeys = new Set(blockedPhones.map((p) => phoneMatchKey(p)).filter(Boolean));
+    // 내가 blocked_contacts에 넣은 번호를 프로필 전화번호로 쓰는 유저 제외 (형식 통일 후 비교)
     allUsers.forEach((u) => {
-      if (u.phone && blockedPhones.includes(u.phone)) ids.add(u.id);
+      const key = phoneMatchKey(u.phone);
+      if (key && blockedKeys.has(key)) ids.add(u.id);
     });
     return ids;
   }, [blockedContacts, allUsers]);
