@@ -65,7 +65,6 @@ interface AnnouncementForm {
   body: string;
   category: Category;
   is_pinned: boolean;
-  published_at: string;
 }
 
 const CATEGORY_META: Record<Category, { label: string; color: 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info' }> = {
@@ -89,7 +88,6 @@ const DEFAULT_FORM: AnnouncementForm = {
   body: '',
   category: 'general',
   is_pinned: false,
-  published_at: dayjs().format('YYYY-MM-DDTHH:mm'),
 };
 
 // ─── API ───────────────────────────────────────────────────────────────────────
@@ -111,7 +109,6 @@ async function createAnnouncement(form: AnnouncementForm): Promise<void> {
       body: form.body,
       category: form.category,
       is_pinned: form.is_pinned,
-      published_at: new Date(form.published_at).toISOString(),
     },
   ]);
   if (error) throw error;
@@ -125,7 +122,6 @@ async function updateAnnouncement(id: string, form: AnnouncementForm): Promise<v
       body: form.body,
       category: form.category,
       is_pinned: form.is_pinned,
-      published_at: new Date(form.published_at).toISOString(),
     })
     .eq('id', id);
   if (error) throw error;
@@ -184,9 +180,7 @@ export default function AnnouncementsPage() {
       setFormOpen(false);
       // 상세 Drawer에 열려 있으면 최신 데이터로 교체
       if (detailItem) {
-        setDetailItem((prev) =>
-          prev ? { ...prev, ...form, published_at: new Date(form.published_at).toISOString() } : null,
-        );
+        setDetailItem((prev) => (prev ? { ...prev, ...form } : null));
       }
     },
     onError: (e: Error) => setFormError(e.message),
@@ -233,7 +227,6 @@ export default function AnnouncementsPage() {
       body: item.body,
       category: item.category,
       is_pinned: item.is_pinned,
-      published_at: dayjs(item.published_at).format('YYYY-MM-DDTHH:mm'),
     });
     setFormError('');
     setFormOpen(true);
@@ -517,30 +510,18 @@ export default function AnnouncementsPage() {
               maxRows={16}
             />
 
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <FormControl size="small" sx={{ minWidth: 140 }}>
-                <InputLabel>카테고리</InputLabel>
-                <Select
-                  value={form.category}
-                  label="카테고리"
-                  onChange={(e) => setForm({ ...form, category: e.target.value as Category })}
-                >
-                  {CATEGORY_OPTIONS.map((c) => (
-                    <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <TextField
-                label="게시일시"
-                type="datetime-local"
-                value={form.published_at}
-                onChange={(e) => setForm({ ...form, published_at: e.target.value })}
-                size="small"
-                slotProps={{ inputLabel: { shrink: true } }}
-                sx={{ flex: 1 }}
-              />
-            </Stack>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>카테고리</InputLabel>
+              <Select
+                value={form.category}
+                label="카테고리"
+                onChange={(e) => setForm({ ...form, category: e.target.value as Category })}
+              >
+                {CATEGORY_OPTIONS.map((c) => (
+                  <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
             <FormControlLabel
               control={
