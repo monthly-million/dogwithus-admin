@@ -65,6 +65,7 @@ interface AnnouncementForm {
   body: string;
   category: Category;
   is_pinned: boolean;
+  push_sent: boolean;
 }
 
 const CATEGORY_META: Record<Category, { label: string; color: 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info' }> = {
@@ -88,6 +89,7 @@ const DEFAULT_FORM: AnnouncementForm = {
   body: '',
   category: 'general',
   is_pinned: false,
+  push_sent: false,
 };
 
 // ─── API ───────────────────────────────────────────────────────────────────────
@@ -109,21 +111,28 @@ async function createAnnouncement(form: AnnouncementForm): Promise<void> {
       body: form.body,
       category: form.category,
       is_pinned: form.is_pinned,
+      push_sent: form.push_sent,
     },
   ]);
   if (error) throw error;
 }
 
-async function updateAnnouncement(id: string, form: AnnouncementForm): Promise<void> {
-  const { error } = await supabaseAdmin
-    .from('announcements')
-    .update({
-      title: form.title,
-      body: form.body,
-      category: form.category,
-      is_pinned: form.is_pinned,
-    })
-    .eq('id', id);
+async function updateAnnouncement(
+  id: string,
+  form: AnnouncementForm,
+  originalPushSent: boolean,
+): Promise<void> {
+  const payload: Record<string, unknown> = {
+    title: form.title,
+    body: form.body,
+    category: form.category,
+    is_pinned: form.is_pinned,
+  };
+  // push_sent 트리거(notify_announcement_push) 재발사 방지: 값이 바뀐 경우에만 포함
+  if (form.push_sent !== originalPushSent) {
+    payload.push_sent = form.push_sent;
+  }
+  const { error } = await supabaseAdmin.from('announcements').update(payload).eq('id', id);
   if (error) throw error;
 }
 
@@ -174,7 +183,15 @@ export default function AnnouncementsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, form }: { id: string; form: AnnouncementForm }) => updateAnnouncement(id, form),
+    mutationFn: ({
+      id,
+      form,
+      originalPushSent,
+    }: {
+      id: string;
+      form: AnnouncementForm;
+      originalPushSent: boolean;
+    }) => updateAnnouncement(id, form, originalPushSent),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['announcements'] });
       setFormOpen(false);
@@ -227,6 +244,7 @@ export default function AnnouncementsPage() {
       body: item.body,
       category: item.category,
       is_pinned: item.is_pinned,
+      push_sent: item.push_sent,
     });
     setFormError('');
     setFormOpen(true);
@@ -237,7 +255,11 @@ export default function AnnouncementsPage() {
     if (!form.body.trim()) { setFormError('내용을 입력해주세요.'); return; }
     setFormError('');
     if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, form });
+      updateMutation.mutate({
+        id: editTarget.id,
+        form,
+        originalPushSent: editTarget.push_sent,
+      });
     } else {
       createMutation.mutate(form);
     }
@@ -533,6 +555,31 @@ export default function AnnouncementsPage() {
               }
               label="상단 고정"
             />
+
+            <Divider />
+
+            <Box>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={form.push_sent}
+                    onChange={(e) => setForm({ ...form, push_sent: e.target.checked })}
+                    disabled={Boolean(editTarget?.push_sent)}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    앱 사용자에게 푸시 알림 발송
+                  </Typography>
+                }
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, ml: 6 }}>
+                {editTarget?.push_sent
+                  ? `이미 발송됨 (${dayjs(editTarget.push_sent_at).format('YYYY-MM-DD HH:mm')}) — 다시 발송할 수 없습니다.`
+                  : `${editTarget ? '저장' : '등록'} 시 앱 사용자 전체에게 즉시 푸시 알림이 발송됩니다. 발송 후에는 취소할 수 없습니다.`}
+              </Typography>
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
