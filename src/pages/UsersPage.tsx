@@ -82,6 +82,38 @@ const APPROVAL_OPTIONS: { value: ApprovalStatus; label: string; color: 'success'
   { value: 'rejected', label: '거절', color: 'error' },
 ];
 
+// ─── Error helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Supabase 가 던지는 PostgrestError 는 `Error` 를 상속하지만 ESM/Vite 빌드 환경에서
+ * `instanceof Error` 가 false 로 평가되어 fallback 메시지만 보이는 사고가 잦다.
+ * code/details/hint 까지 한 줄로 합쳐서 보여줄 수 있게 평탄화한다.
+ */
+function formatSupabaseError(err: unknown, fallback: string): string {
+  if (!err) return fallback;
+  if (typeof err === 'string') return err;
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'object') {
+    const e = err as { message?: string; details?: string; hint?: string; code?: string };
+    const parts = [
+      e.code ? `[${e.code}]` : '',
+      e.message ?? '',
+      e.details ? `· ${e.details}` : '',
+      e.hint ? `(hint: ${e.hint})` : '',
+    ].filter(Boolean);
+    if (parts.length > 0) return parts.join(' ');
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+const isAdminClientConfigured =
+  Boolean(import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY);
+
 // ─── API functions ────────────────────────────────────────────────────────────
 
 async function fetchUsers() {
@@ -129,8 +161,20 @@ async function createAdminManualIntros(receiverId: string, cardProfileIds: strin
     card_profile_id,
     source: 'admin_manual' as const,
   }));
-  const { error } = await supabaseAdmin.from('intros').insert(inserts);
-  if (error) throw error;
+  const { data, error } = await supabaseAdmin
+    .from('intros')
+    .insert(inserts)
+    .select('id');
+  if (error) {
+    // PostgrestError 는 Error 를 상속하지만 빌드 환경에 따라 instanceof 가 실패할 수 있어
+    // 원본 객체와 함께 콘솔에도 남긴다.
+    console.error('[createAdminManualIntros] insert failed', {
+      error,
+      inserts,
+    });
+    throw error;
+  }
+  return data;
 }
 
 /** 비교용: 국내 0으로 시작하는 숫자열로 통일 (82… → 0…) */
@@ -572,7 +616,8 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
       setMatchSuccess(true);
       setSelectedIds([]);
     } catch (err) {
-      setMatchError(err instanceof Error ? err.message : '매칭에 실패했습니다.');
+      console.error('[ManualMatch] handleMatch failed', err);
+      setMatchError(formatSupabaseError(err, '매칭에 실패했습니다.'));
     } finally {
       setMatching(false);
     }
@@ -637,13 +682,21 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
       </DialogTitle>
 
       <DialogContent sx={{ p: 0 }}>
+        {!isAdminClientConfigured && (
+          <Alert severity="warning" sx={{ mx: 2, mt: 2 }}>
+            <strong>VITE_SUPABASE_SERVICE_ROLE_KEY</strong> 가 설정되어 있지 않습니다.
+            현재 anon 키로 동작 중이라 <code>intros</code> 테이블의 RLS 때문에 매칭 인서트가
+            거부될 수 있습니다. <code>.env</code> 파일에 service_role 키를 추가한 뒤 dev 서버를
+            재시작하세요.
+          </Alert>
+        )}
         {matchSuccess && (
           <Alert severity="success" sx={{ mx: 2, mt: 2 }}>
             매칭이 완료되었습니다.
           </Alert>
         )}
         {matchError && (
-          <Alert severity="error" sx={{ mx: 2, mt: 2 }}>
+          <Alert severity="error" sx={{ mx: 2, mt: 2, whiteSpace: 'pre-wrap' }}>
             {matchError}
           </Alert>
         )}
