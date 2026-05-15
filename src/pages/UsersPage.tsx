@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -50,6 +50,9 @@ import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, supabaseAdmin } from '../api/supabaseClient';
 import { fetchSignedUrlsForRefs } from '../lib/signedStorageUrls';
@@ -969,6 +972,623 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
   );
 }
 
+// ─── AddUserDialog ────────────────────────────────────────────────────────────
+
+interface AddUserDialogProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+interface NewUserForm {
+  nickname: string;
+  email: string;
+  phone: string;
+  gender: string;
+  birth_date: string;
+  age: string;
+  regions: string;
+  mbti: string;
+  smoking: string;
+  drinking: string;
+  religion: string;
+  interests: string;
+  height: string;
+  education: string;
+  school_name: string;
+  job: string;
+  bio: string;
+  approval_status: ApprovalStatus;
+  is_test_data: boolean;
+}
+
+const EMPTY_NEW_USER_FORM: NewUserForm = {
+  nickname: '',
+  email: '',
+  phone: '',
+  gender: '',
+  birth_date: '',
+  age: '',
+  regions: '',
+  mbti: '',
+  smoking: '',
+  drinking: '',
+  religion: '',
+  interests: '',
+  height: '',
+  education: '',
+  school_name: '',
+  job: '',
+  bio: '',
+  approval_status: 'pending',
+  is_test_data: false,
+};
+
+const MAX_PROFILE_PHOTOS = 6;
+
+/**
+ * 신규 유저 프로필 사진을 Storage에 업로드하고 저장된 경로(`userId/filename`) 배열을 반환.
+ * 기존 사용자 데이터와 일관성을 위해 전체 URL이 아닌 storage path만 저장한다.
+ */
+async function uploadProfilePhotos(userId: string, files: File[]): Promise<string[]> {
+  const uploaded: string[] = [];
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const ext = (file.name.split('.').pop() ?? 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const path = `${userId}/${Date.now()}_${i}.${ext}`;
+    const { error } = await supabaseAdmin.storage
+      .from(PHOTO_BUCKET)
+      .upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined });
+    if (error) {
+      throw new Error(`사진 업로드 실패 (${file.name}): ${error.message}`);
+    }
+    uploaded.push(path);
+  }
+  return uploaded;
+}
+
+async function removeUploadedPhotos(paths: string[]) {
+  if (paths.length === 0) return;
+  try {
+    await supabaseAdmin.storage.from(PHOTO_BUCKET).remove(paths);
+  } catch (err) {
+    console.warn('[AddUser] rollback storage remove failed', err);
+  }
+}
+
+function splitCsv(value: string): string[] {
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function AddUserDialog({ open, onClose }: AddUserDialogProps) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<NewUserForm>(EMPTY_NEW_USER_FORM);
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  // unmount 시 안전망: 남아있는 object URL 일괄 해제 (개별 해제는 handleRemoveFile / resetState 에서 수행)
+  const previewsRef = useRef<string[]>([]);
+  useEffect(() => {
+    previewsRef.current = previews;
+  }, [previews]);
+  useEffect(() => {
+    return () => {
+      previewsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  const resetState = useCallback(() => {
+    previewsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    setForm(EMPTY_NEW_USER_FORM);
+    setFiles([]);
+    setPreviews([]);
+    setError('');
+    setSuccess(false);
+  }, []);
+
+  const handleClose = () => {
+    if (submitting) return;
+    resetState();
+    onClose();
+  };
+
+  const setField = <K extends keyof NewUserForm>(key: K, value: NewUserForm[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setError('');
+    setSuccess(false);
+  };
+
+  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length === 0) return;
+    const room = MAX_PROFILE_PHOTOS - files.length;
+    const accepted = picked.slice(0, Math.max(room, 0));
+    const newPreviews = accepted.map((f) => URL.createObjectURL(f));
+    setFiles((prev) => [...prev, ...accepted]);
+    setPreviews((prev) => [...prev, ...newPreviews]);
+    e.target.value = '';
+  };
+
+  const handleRemoveFile = (idx: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== idx));
+    setPreviews((prev) => {
+      const target = prev[idx];
+      if (target) URL.revokeObjectURL(target);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (!form.nickname.trim()) {
+      setError('닉네임은 필수입니다.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    setSuccess(false);
+
+    const userId = crypto.randomUUID();
+    let uploadedPaths: string[] = [];
+
+    try {
+      if (files.length > 0) {
+        uploadedPaths = await uploadProfilePhotos(userId, files);
+      }
+
+      const payload: Record<string, unknown> = {
+        id: userId,
+        nickname: form.nickname.trim(),
+        approval_status: form.approval_status,
+        is_test_data: form.is_test_data,
+      };
+
+      if (form.email.trim()) payload.email = form.email.trim();
+      if (form.phone.trim()) payload.phone = form.phone.trim();
+      if (form.gender) payload.gender = form.gender;
+      if (form.birth_date) payload.birth_date = form.birth_date;
+      if (form.age.trim()) payload.age = Number(form.age);
+      if (form.regions.trim()) payload.regions = splitCsv(form.regions);
+      if (form.mbti.trim()) payload.mbti = form.mbti.trim().toUpperCase();
+      if (form.smoking) payload.smoking = form.smoking;
+      if (form.drinking) payload.drinking = form.drinking;
+      if (form.religion) payload.religion = form.religion;
+      if (form.interests.trim()) payload.interests = splitCsv(form.interests);
+      if (form.height.trim()) payload.height = Number(form.height);
+      if (form.education.trim()) payload.education = form.education.trim();
+      if (form.school_name.trim()) payload.school_name = form.school_name.trim();
+      if (form.job.trim()) payload.job = form.job.trim();
+      if (form.bio.trim()) payload.bio = form.bio.trim();
+      if (uploadedPaths.length > 0) payload.profile_photos = uploadedPaths;
+
+      const { error: insertError } = await supabaseAdmin.from('profiles').insert(payload);
+      if (insertError) {
+        await removeUploadedPhotos(uploadedPaths);
+        throw insertError;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setSuccess(true);
+      setTimeout(() => {
+        resetState();
+        onClose();
+      }, 700);
+    } catch (err) {
+      console.error('[AddUser] submit failed', err);
+      setError(formatSupabaseError(err, '유저 추가에 실패했습니다.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+      <DialogTitle
+        sx={{
+          fontWeight: 700,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        사용자 추가
+        <IconButton onClick={handleClose} size="small" disabled={submitting}>
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+
+      <DialogContent dividers>
+        {!isAdminClientConfigured && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <strong>VITE_SUPABASE_SERVICE_ROLE_KEY</strong> 가 설정되어 있지 않아 RLS 정책에 의해
+            insert 가 거부될 수 있습니다.
+          </Alert>
+        )}
+        {error && (
+          <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>
+            {error}
+          </Alert>
+        )}
+        {success && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            유저가 추가되었습니다.
+          </Alert>
+        )}
+
+        {/* 프로필 사진 */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+            프로필 사진 ({previews.length}/{MAX_PROFILE_PHOTOS})
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+            {previews.map((url, idx) => (
+              <Box
+                key={`${url}-${idx}`}
+                sx={{
+                  position: 'relative',
+                  width: 96,
+                  height: 96,
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'grey.100',
+                }}
+              >
+                <Box
+                  component="img"
+                  src={url}
+                  alt={`업로드 미리보기 ${idx + 1}`}
+                  sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+                <IconButton
+                  size="small"
+                  onClick={() => handleRemoveFile(idx)}
+                  disabled={submitting}
+                  sx={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    bgcolor: 'rgba(0,0,0,0.55)',
+                    color: 'white',
+                    p: 0.4,
+                    '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
+                  }}
+                >
+                  <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+                {idx === 0 && (
+                  <Chip
+                    label="대표"
+                    size="small"
+                    color="primary"
+                    sx={{
+                      position: 'absolute',
+                      bottom: 4,
+                      left: 4,
+                      height: 18,
+                      fontSize: 10,
+                      '& .MuiChip-label': { px: 0.8 },
+                    }}
+                  />
+                )}
+              </Box>
+            ))}
+            {previews.length < MAX_PROFILE_PHOTOS && (
+              <Button
+                component="label"
+                variant="outlined"
+                disabled={submitting}
+                sx={{
+                  width: 96,
+                  height: 96,
+                  borderStyle: 'dashed',
+                  flexDirection: 'column',
+                  gap: 0.5,
+                  color: 'text.secondary',
+                }}
+              >
+                <PhotoCameraIcon />
+                <Typography variant="caption">사진 추가</Typography>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  onChange={handleFilesChange}
+                />
+              </Button>
+            )}
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            첫 번째 사진이 대표 사진으로 사용됩니다. (최대 {MAX_PROFILE_PHOTOS}장)
+          </Typography>
+        </Box>
+
+        <Divider sx={{ mb: 2 }} />
+
+        {/* 기본 정보 */}
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+          기본 정보
+        </Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+            gap: 2,
+            mb: 3,
+          }}
+        >
+          <TextField
+            label="닉네임 *"
+            value={form.nickname}
+            onChange={(e) => setField('nickname', e.target.value)}
+            size="small"
+            required
+            disabled={submitting}
+          />
+          <TextField
+            label="이메일"
+            type="email"
+            value={form.email}
+            onChange={(e) => setField('email', e.target.value)}
+            size="small"
+            disabled={submitting}
+          />
+          <TextField
+            label="전화번호"
+            value={form.phone}
+            onChange={(e) => setField('phone', e.target.value)}
+            size="small"
+            placeholder="010-1234-5678"
+            disabled={submitting}
+          />
+          <Select
+            value={form.gender}
+            onChange={(e) => setField('gender', e.target.value)}
+            size="small"
+            displayEmpty
+            disabled={submitting}
+          >
+            <MenuItem value="">
+              <em>성별 선택</em>
+            </MenuItem>
+            <MenuItem value="male">남성</MenuItem>
+            <MenuItem value="female">여성</MenuItem>
+          </Select>
+          <TextField
+            label="생년월일"
+            type="date"
+            value={form.birth_date}
+            onChange={(e) => setField('birth_date', e.target.value)}
+            size="small"
+            slotProps={{ inputLabel: { shrink: true } }}
+            disabled={submitting}
+          />
+          <TextField
+            label="나이"
+            type="number"
+            value={form.age}
+            onChange={(e) => setField('age', e.target.value)}
+            size="small"
+            disabled={submitting}
+          />
+          <TextField
+            label="지역 (쉼표로 구분)"
+            value={form.regions}
+            onChange={(e) => setField('regions', e.target.value)}
+            size="small"
+            placeholder="서울, 경기"
+            disabled={submitting}
+          />
+          <TextField
+            label="MBTI"
+            value={form.mbti}
+            onChange={(e) => setField('mbti', e.target.value)}
+            size="small"
+            placeholder="ENFP"
+            disabled={submitting}
+          />
+        </Box>
+
+        <Divider sx={{ mb: 2 }} />
+
+        {/* 라이프스타일 */}
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+          라이프스타일
+        </Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
+            gap: 2,
+            mb: 3,
+          }}
+        >
+          <Select
+            value={form.smoking}
+            onChange={(e) => setField('smoking', e.target.value)}
+            size="small"
+            displayEmpty
+            disabled={submitting}
+          >
+            <MenuItem value="">
+              <em>흡연</em>
+            </MenuItem>
+            <MenuItem value="비흡연">비흡연</MenuItem>
+            <MenuItem value="가끔">가끔</MenuItem>
+            <MenuItem value="흡연">흡연</MenuItem>
+          </Select>
+          <Select
+            value={form.drinking}
+            onChange={(e) => setField('drinking', e.target.value)}
+            size="small"
+            displayEmpty
+            disabled={submitting}
+          >
+            <MenuItem value="">
+              <em>음주</em>
+            </MenuItem>
+            <MenuItem value="안함">안함</MenuItem>
+            <MenuItem value="가끔">가끔</MenuItem>
+            <MenuItem value="자주">자주</MenuItem>
+          </Select>
+          <Select
+            value={form.religion}
+            onChange={(e) => setField('religion', e.target.value)}
+            size="small"
+            displayEmpty
+            disabled={submitting}
+          >
+            <MenuItem value="">
+              <em>종교</em>
+            </MenuItem>
+            <MenuItem value="없음">없음</MenuItem>
+            <MenuItem value="기독교">기독교</MenuItem>
+            <MenuItem value="천주교">천주교</MenuItem>
+            <MenuItem value="불교">불교</MenuItem>
+            <MenuItem value="기타">기타</MenuItem>
+          </Select>
+          <TextField
+            label="키 (cm)"
+            type="number"
+            value={form.height}
+            onChange={(e) => setField('height', e.target.value)}
+            size="small"
+            disabled={submitting}
+          />
+          <TextField
+            label="관심사 (쉼표로 구분)"
+            value={form.interests}
+            onChange={(e) => setField('interests', e.target.value)}
+            size="small"
+            placeholder="여행, 운동, 영화"
+            sx={{ gridColumn: { sm: 'span 2' } }}
+            disabled={submitting}
+          />
+        </Box>
+
+        <Divider sx={{ mb: 2 }} />
+
+        {/* 학력/직업 */}
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+          학력 · 직업
+        </Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
+            gap: 2,
+            mb: 3,
+          }}
+        >
+          <TextField
+            label="학력"
+            value={form.education}
+            onChange={(e) => setField('education', e.target.value)}
+            size="small"
+            disabled={submitting}
+          />
+          <TextField
+            label="학교명"
+            value={form.school_name}
+            onChange={(e) => setField('school_name', e.target.value)}
+            size="small"
+            disabled={submitting}
+          />
+          <TextField
+            label="직업"
+            value={form.job}
+            onChange={(e) => setField('job', e.target.value)}
+            size="small"
+            disabled={submitting}
+          />
+        </Box>
+
+        {/* 자기소개 */}
+        <TextField
+          label="자기소개"
+          value={form.bio}
+          onChange={(e) => setField('bio', e.target.value)}
+          size="small"
+          fullWidth
+          multiline
+          minRows={3}
+          maxRows={6}
+          sx={{ mb: 3 }}
+          disabled={submitting}
+        />
+
+        <Divider sx={{ mb: 2 }} />
+
+        {/* 관리자 옵션 */}
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+          관리자 옵션
+        </Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+            gap: 2,
+          }}
+        >
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              초기 승인 상태
+            </Typography>
+            <Select
+              value={form.approval_status}
+              onChange={(e) => setField('approval_status', e.target.value as ApprovalStatus)}
+              size="small"
+              fullWidth
+              disabled={submitting}
+            >
+              {APPROVAL_OPTIONS.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value}>
+                  <Chip label={opt.label} size="small" color={opt.color} sx={{ cursor: 'pointer' }} />
+                </MenuItem>
+              ))}
+            </Select>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
+            <Button
+              variant={form.is_test_data ? 'contained' : 'outlined'}
+              color="warning"
+              fullWidth
+              size="small"
+              onClick={() => setField('is_test_data', !form.is_test_data)}
+              disabled={submitting}
+              sx={{ height: 40 }}
+            >
+              {form.is_test_data ? '테스트 데이터 ON' : '테스트 데이터 OFF'}
+            </Button>
+          </Box>
+        </Box>
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={handleClose} variant="outlined" color="inherit" disabled={submitting}>
+          취소
+        </Button>
+        <Button
+          onClick={handleSubmit}
+          variant="contained"
+          startIcon={
+            submitting ? <CircularProgress size={14} color="inherit" /> : <PersonAddIcon />
+          }
+          disabled={submitting || !form.nickname.trim()}
+        >
+          {submitting ? '저장 중...' : '추가하기'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // ─── Column definitions ───────────────────────────────────────────────────────
 
 const columns: GridColDef[] = [
@@ -1091,6 +1711,9 @@ export default function UsersPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectLoading, setRejectLoading] = useState(false);
   const [rejectError, setRejectError] = useState('');
+
+  // 사용자 추가
+  const [addUserOpen, setAddUserOpen] = useState(false);
 
   // 정지 관리
   const [editSuspendedUntil, setEditSuspendedUntil] = useState('');
@@ -1326,7 +1949,7 @@ export default function UsersPage() {
         유저 관리
       </Typography>
 
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 2, display: 'flex', gap: 1.5, alignItems: 'center', justifyContent: 'space-between' }}>
         <TextField
           placeholder="닉네임 또는 이메일 검색..."
           value={search}
@@ -1343,6 +1966,15 @@ export default function UsersPage() {
             },
           }}
         />
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<PersonAddIcon />}
+          onClick={() => setAddUserOpen(true)}
+          sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
+        >
+          사용자 추가
+        </Button>
       </Box>
 
       <Box sx={{ height: 600, bgcolor: 'white', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
@@ -1660,6 +2292,9 @@ export default function UsersPage() {
         onClose={() => setLightboxUser(null)}
         initialIndex={lightboxInitialIndex}
       />
+
+      {/* 사용자 추가 다이얼로그 */}
+      <AddUserDialog open={addUserOpen} onClose={() => setAddUserOpen(false)} />
 
       {/* 승인 상태 변경 확인 Dialog */}
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>

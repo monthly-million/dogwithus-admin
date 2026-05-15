@@ -16,7 +16,7 @@ import { DataGrid, type GridColDef } from '@mui/x-data-grid';
 import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../api/supabaseClient';
+import { supabaseAdmin } from '../api/supabaseClient';
 import type { Intro } from '../types/database';
 import dayjs from 'dayjs';
 
@@ -26,19 +26,41 @@ type IntroRow = Intro & {
 };
 
 async function fetchIntros(): Promise<IntroRow[]> {
-  const { data, error } = await supabase
+  // 1) intros 본문을 service_role 클라이언트로 조회 (RLS 우회)
+  const { data: intros, error } = await supabaseAdmin
     .from('intros')
-    .select(
-      `
-      *,
-      receiver:profiles!intros_receiver_id_fkey(id, nickname),
-      card_profile:profiles!intros_card_profile_id_fkey(id, nickname)
-    `,
-    )
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(2000);
   if (error) throw error;
-  return (data ?? []) as IntroRow[];
+  const rows = (intros ?? []) as Intro[];
+
+  // 2) 관련 프로필을 한 번에 조회한 뒤 매핑한다.
+  //    (relational select 의 FK 제약 이름이 환경마다 다를 수 있어 별도 쿼리로 안전하게 처리)
+  const profileIds = Array.from(
+    new Set(rows.flatMap((r) => [r.receiver_id, r.card_profile_id])),
+  ).filter(Boolean);
+
+  let profileMap = new Map<string, { id: string; nickname: string | null }>();
+  if (profileIds.length > 0) {
+    const { data: profiles, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, nickname')
+      .in('id', profileIds);
+    if (profileError) throw profileError;
+    profileMap = new Map(
+      (profiles ?? []).map((p) => [
+        (p as { id: string }).id,
+        p as { id: string; nickname: string | null },
+      ]),
+    );
+  }
+
+  return rows.map((r) => ({
+    ...r,
+    receiver: profileMap.get(r.receiver_id) ?? null,
+    card_profile: profileMap.get(r.card_profile_id) ?? null,
+  }));
 }
 
 type ChipColor = 'success' | 'error' | 'warning' | 'info' | 'default';
