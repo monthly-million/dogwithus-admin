@@ -20,6 +20,7 @@ interface Profile {
   interests: string[] | null
   approval_status: string | null
   deleted_at?: string | null
+  suspended_until?: string | null
 }
 
 // ─── 전화번호·차단 (UsersPage.tsx 와 동일) ───────────────────────────────────
@@ -45,6 +46,12 @@ function phoneKeyVariants(phone?: string | null): string[] {
     }
   }
   return [...variants].filter(Boolean)
+}
+
+/** suspended_until 이 현재 시각보다 미래면 정지 중 (관리자 화면·수동매칭과 동일) */
+function isCurrentlySuspended(suspendedUntil: string | null | undefined): boolean {
+  if (!suspendedUntil) return false
+  return new Date(suspendedUntil).getTime() > Date.now()
 }
 
 function getRegionOverlapScore(a: Profile, b: Profile): number {
@@ -114,7 +121,7 @@ async function fetchBlockedIdsForMatch(
 }
 
 const PROFILE_SELECT =
-  'id, phone, gender, age, regions, religion, smoking, drinking, interests, approval_status, deleted_at'
+  'id, phone, gender, age, regions, religion, smoking, drinking, interests, approval_status, deleted_at, suspended_until'
 
 async function autoMatchForUser(userId: string, matchCount: number) {
   const { data: userA, error: userErr } = await supabaseAdmin
@@ -153,6 +160,7 @@ async function autoMatchForUser(userId: string, matchCount: number) {
 
   const candidates: Profile[] = allList.filter((u) => {
     if (u.id === userId) return false
+    if (isCurrentlySuspended(u.suspended_until)) return false
     if (alreadyIntroducedIds.has(u.id)) return false
     if (blockedIds.has(u.id)) return false
     if (userA.gender && u.gender && u.gender === userA.gender) return false

@@ -232,6 +232,11 @@ function phoneKeyVariants(phone?: string): string[] {
   return [...variants].filter(Boolean);
 }
 
+/** 정지 종료 시각이 아직 미래면 매칭 후보에서 제외 (회원 목록·자동매칭과 동일 기준) */
+function isUserCurrentlySuspendedForMatch(user: Pick<User, 'suspended_until'>): boolean {
+  return Boolean(user.suspended_until && dayjs(user.suspended_until).isAfter(dayjs()));
+}
+
 /**
  * userA가 차단한 전화번호 목록과 userA의 전화번호를 차단한 유저 ID 목록을 반환합니다.
  * - blockedPhones: userA(owner_id)가 등록한 차단 번호 → 해당 번호를 가진 유저 제외
@@ -578,6 +583,8 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
     if (introsLoading || blockedLoading) return [];
     const filtered = allUsers.filter((u) => {
       if (u.id === userA.id) return false;
+      if (u.deleted_at) return false;
+      if (isUserCurrentlySuspendedForMatch(u)) return false;
       if (u.approval_status !== 'approved') return false;
       if (matchedIds.has(u.id)) return false;
       if (blockedIdsSet.has(u.id)) return false;
