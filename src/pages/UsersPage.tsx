@@ -53,6 +53,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import PetsIcon from '@mui/icons-material/Pets';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, supabaseAdmin } from '../api/supabaseClient';
 import { fetchSignedUrlsForRefs } from '../lib/signedStorageUrls';
@@ -60,6 +61,7 @@ import type { User, BlockedContact } from '../types/database';
 import dayjs from 'dayjs';
 
 const PHOTO_BUCKET = 'profile-photos';
+const DOG_PHOTO_BUCKET = 'dog-photos';
 
 type ApprovalStatus = 'approved' | 'pending' | 'rejected';
 
@@ -981,7 +983,6 @@ interface AddUserDialogProps {
 
 interface NewUserForm {
   nickname: string;
-  email: string;
   phone: string;
   gender: string;
   birth_date: string;
@@ -992,18 +993,25 @@ interface NewUserForm {
   drinking: string;
   religion: string;
   interests: string;
+  styles: string;
   height: string;
   education: string;
   school_name: string;
   job: string;
   bio: string;
-  approval_status: ApprovalStatus;
-  is_test_data: boolean;
+  partner_filter: string;
+  dog_name: string;
+  dog_breed: string;
+  dog_age: string;
+  dog_gender: string;
+  dog_size: string;
+  dog_personalities: string;
+  dog_walk_styles: string;
+  dog_description: string;
 }
 
 const EMPTY_NEW_USER_FORM: NewUserForm = {
   nickname: '',
-  email: '',
   phone: '',
   gender: '',
   birth_date: '',
@@ -1014,16 +1022,25 @@ const EMPTY_NEW_USER_FORM: NewUserForm = {
   drinking: '',
   religion: '',
   interests: '',
+  styles: '',
   height: '',
   education: '',
   school_name: '',
   job: '',
   bio: '',
-  approval_status: 'pending',
-  is_test_data: false,
+  partner_filter: '',
+  dog_name: '',
+  dog_breed: '',
+  dog_age: '',
+  dog_gender: '',
+  dog_size: '',
+  dog_personalities: '',
+  dog_walk_styles: '',
+  dog_description: '',
 };
 
 const MAX_PROFILE_PHOTOS = 6;
+const MAX_DOG_PHOTOS = 6;
 
 /**
  * 신규 유저 프로필 사진을 Storage에 업로드하고 저장된 경로(`userId/filename`) 배열을 반환.
@@ -1055,6 +1072,40 @@ async function removeUploadedPhotos(paths: string[]) {
   }
 }
 
+async function uploadDogPhotos(ownerUserId: string, files: File[]): Promise<string[]> {
+  const uploaded: string[] = [];
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const ext = (file.name.split('.').pop() ?? 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const path = `${ownerUserId}/${Date.now()}_dog_${i}.${ext}`;
+    const { error } = await supabaseAdmin.storage
+      .from(DOG_PHOTO_BUCKET)
+      .upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined });
+    if (error) {
+      throw new Error(`강아지 사진 업로드 실패 (${file.name}): ${error.message}`);
+    }
+    uploaded.push(path);
+  }
+  return uploaded;
+}
+
+async function removeUploadedDogPhotos(paths: string[]) {
+  if (paths.length === 0) return;
+  try {
+    await supabaseAdmin.storage.from(DOG_PHOTO_BUCKET).remove(paths);
+  } catch (err) {
+    console.warn('[AddUser] rollback dog storage remove failed', err);
+  }
+}
+
+/** 프로필은 생성됐으나 강아지 등록 등 후속 단계 실패 시 정리 */
+async function rollbackNewUser(userId: string, profilePhotoPaths: string[], dogPhotoPaths: string[]) {
+  await removeUploadedDogPhotos(dogPhotoPaths);
+  const { error } = await supabaseAdmin.from('profiles').delete().eq('id', userId);
+  if (error) console.warn('[AddUser] rollback profile delete failed', error);
+  await removeUploadedPhotos(profilePhotoPaths);
+}
+
 function splitCsv(value: string): string[] {
   return value
     .split(',')
@@ -1062,31 +1113,77 @@ function splitCsv(value: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * 한국 휴대폰을 DB에 넣을 E.164(+82…) 형태로 맞춘다.
+ * 예: 01012341234, 010-1234-1234 → +821012341234 (+82 뒤에는 국번의 선행 0 제거)
+ */
+function normalizeKoreaPhoneForDb(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+
+  if (trimmed.startsWith('+')) {
+    const digits = trimmed.replace(/\D/g, '');
+    if (digits.startsWith('82')) return `+${digits}`;
+    return trimmed;
+  }
+
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits) return '';
+
+  if (digits.startsWith('82')) {
+    return `+${digits}`;
+  }
+
+  if (digits.length === 11 && digits.startsWith('010')) {
+    return `+82${digits.slice(1)}`;
+  }
+
+  if (digits.length === 11 && /^01[016789]\d{8}$/.test(digits)) {
+    return `+82${digits.slice(1)}`;
+  }
+
+  if (digits.length === 10 && /^10\d{8}$/.test(digits)) {
+    return `+82${digits}`;
+  }
+
+  return trimmed;
+}
+
 function AddUserDialog({ open, onClose }: AddUserDialogProps) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<NewUserForm>(EMPTY_NEW_USER_FORM);
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [dogFiles, setDogFiles] = useState<File[]>([]);
+  const [dogPreviews, setDogPreviews] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
   // unmount 시 안전망: 남아있는 object URL 일괄 해제 (개별 해제는 handleRemoveFile / resetState 에서 수행)
   const previewsRef = useRef<string[]>([]);
+  const dogPreviewsRef = useRef<string[]>([]);
   useEffect(() => {
     previewsRef.current = previews;
   }, [previews]);
   useEffect(() => {
+    dogPreviewsRef.current = dogPreviews;
+  }, [dogPreviews]);
+  useEffect(() => {
     return () => {
       previewsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      dogPreviewsRef.current.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
 
   const resetState = useCallback(() => {
     previewsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    dogPreviewsRef.current.forEach((url) => URL.revokeObjectURL(url));
     setForm(EMPTY_NEW_USER_FORM);
     setFiles([]);
     setPreviews([]);
+    setDogFiles([]);
+    setDogPreviews([]);
     setError('');
     setSuccess(false);
   }, []);
@@ -1123,17 +1220,58 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
     });
   };
 
+  const handleDogFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length === 0) return;
+    const room = MAX_DOG_PHOTOS - dogFiles.length;
+    const accepted = picked.slice(0, Math.max(room, 0));
+    const newPreviews = accepted.map((f) => URL.createObjectURL(f));
+    setDogFiles((prev) => [...prev, ...accepted]);
+    setDogPreviews((prev) => [...prev, ...newPreviews]);
+    e.target.value = '';
+  };
+
+  const handleRemoveDogFile = (idx: number) => {
+    setDogFiles((prev) => prev.filter((_, i) => i !== idx));
+    setDogPreviews((prev) => {
+      const target = prev[idx];
+      if (target) URL.revokeObjectURL(target);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
   const handleSubmit = async () => {
     if (!form.nickname.trim()) {
       setError('닉네임은 필수입니다.');
       return;
     }
+    if (!form.gender) {
+      setError('성별은 필수입니다. (DB: profiles.gender NOT NULL)');
+      return;
+    }
+
+    const dogExtrasWithoutName =
+      dogFiles.length > 0 ||
+      Boolean(form.dog_breed.trim()) ||
+      Boolean(form.dog_age.trim()) ||
+      Boolean(form.dog_gender.trim()) ||
+      Boolean(form.dog_size.trim()) ||
+      Boolean(form.dog_personalities.trim()) ||
+      Boolean(form.dog_walk_styles.trim()) ||
+      Boolean(form.dog_description.trim());
+
+    if (dogExtrasWithoutName && !form.dog_name.trim()) {
+      setError('강아지 정보·사진을 입력한 경우 강아지 이름은 필수입니다.');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
     setSuccess(false);
 
     const userId = crypto.randomUUID();
     let uploadedPaths: string[] = [];
+    let dogUploadedPaths: string[] = [];
 
     try {
       if (files.length > 0) {
@@ -1143,26 +1281,26 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
       const payload: Record<string, unknown> = {
         id: userId,
         nickname: form.nickname.trim(),
-        approval_status: form.approval_status,
-        is_test_data: form.is_test_data,
+        gender: form.gender,
       };
 
-      if (form.email.trim()) payload.email = form.email.trim();
-      if (form.phone.trim()) payload.phone = form.phone.trim();
-      if (form.gender) payload.gender = form.gender;
+      const phoneDb = normalizeKoreaPhoneForDb(form.phone);
+      if (phoneDb) payload.phone = phoneDb;
       if (form.birth_date) payload.birth_date = form.birth_date;
       if (form.age.trim()) payload.age = Number(form.age);
       if (form.regions.trim()) payload.regions = splitCsv(form.regions);
       if (form.mbti.trim()) payload.mbti = form.mbti.trim().toUpperCase();
-      if (form.smoking) payload.smoking = form.smoking;
-      if (form.drinking) payload.drinking = form.drinking;
-      if (form.religion) payload.religion = form.religion;
+      if (form.smoking.trim()) payload.smoking = form.smoking.trim();
+      if (form.drinking.trim()) payload.drinking = form.drinking.trim();
+      if (form.religion.trim()) payload.religion = form.religion.trim();
       if (form.interests.trim()) payload.interests = splitCsv(form.interests);
+      if (form.styles.trim()) payload.styles = splitCsv(form.styles);
       if (form.height.trim()) payload.height = Number(form.height);
       if (form.education.trim()) payload.education = form.education.trim();
       if (form.school_name.trim()) payload.school_name = form.school_name.trim();
       if (form.job.trim()) payload.job = form.job.trim();
       if (form.bio.trim()) payload.bio = form.bio.trim();
+      if (form.partner_filter.trim()) payload.partner_filter = form.partner_filter.trim();
       if (uploadedPaths.length > 0) payload.profile_photos = uploadedPaths;
 
       const { error: insertError } = await supabaseAdmin.from('profiles').insert(payload);
@@ -1171,7 +1309,42 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
         throw insertError;
       }
 
+      if (form.dog_name.trim()) {
+        const dogId = crypto.randomUUID();
+        try {
+          if (dogFiles.length > 0) {
+            dogUploadedPaths = await uploadDogPhotos(userId, dogFiles);
+          }
+          const dogPayload: Record<string, unknown> = {
+            id: dogId,
+            owner_id: userId,
+            name: form.dog_name.trim(),
+          };
+          if (form.dog_breed.trim()) dogPayload.breed = form.dog_breed.trim();
+          if (form.dog_age.trim()) dogPayload.age = Number(form.dog_age);
+          if (form.dog_gender.trim()) dogPayload.gender = form.dog_gender.trim();
+          if (form.dog_size.trim()) dogPayload.size = form.dog_size.trim();
+          if (form.dog_personalities.trim()) {
+            dogPayload.personalities = splitCsv(form.dog_personalities);
+          }
+          if (form.dog_walk_styles.trim()) {
+            dogPayload.walk_styles = splitCsv(form.dog_walk_styles);
+          }
+          if (form.dog_description.trim()) dogPayload.description = form.dog_description.trim();
+          if (dogUploadedPaths.length > 0) dogPayload.photos = dogUploadedPaths;
+
+          const { error: dogInsertError } = await supabaseAdmin.from('dogs').insert(dogPayload);
+          if (dogInsertError) throw dogInsertError;
+        } catch (dogErr) {
+          await rollbackNewUser(userId, uploadedPaths, dogUploadedPaths);
+          throw dogErr;
+        }
+      }
+
       await queryClient.invalidateQueries({ queryKey: ['users'] });
+      if (form.dog_name.trim()) {
+        await queryClient.invalidateQueries({ queryKey: ['dogs'] });
+      }
       setSuccess(true);
       setTimeout(() => {
         resetState();
@@ -1218,6 +1391,9 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
             유저가 추가되었습니다.
           </Alert>
         )}
+        <Alert severity="info" variant="outlined" sx={{ mb: 2 }}>
+          승인 상태·쿠키·알림·FCM·생성·수정 시각 등은 DB 기본값·앱 연동으로 채워지며 여기서는 입력하지 않습니다.
+        </Alert>
 
         {/* 프로필 사진 */}
         <Box sx={{ mb: 3 }}>
@@ -1332,19 +1508,12 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
             disabled={submitting}
           />
           <TextField
-            label="이메일"
-            type="email"
-            value={form.email}
-            onChange={(e) => setField('email', e.target.value)}
-            size="small"
-            disabled={submitting}
-          />
-          <TextField
             label="전화번호"
             value={form.phone}
             onChange={(e) => setField('phone', e.target.value)}
             size="small"
-            placeholder="010-1234-5678"
+            placeholder="01012341234"
+            helperText="저장 시 +82… 형태로 바뀝니다 (예: 01012341234 → +821012341234)"
             disabled={submitting}
           />
           <Select
@@ -1355,10 +1524,10 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
             disabled={submitting}
           >
             <MenuItem value="">
-              <em>성별 선택</em>
+              <em>성별 선택 (필수)</em>
             </MenuItem>
-            <MenuItem value="male">남성</MenuItem>
-            <MenuItem value="female">여성</MenuItem>
+            <MenuItem value="남성">남성</MenuItem>
+            <MenuItem value="여성">여성</MenuItem>
           </Select>
           <TextField
             label="생년월일"
@@ -1382,7 +1551,7 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
             value={form.regions}
             onChange={(e) => setField('regions', e.target.value)}
             size="small"
-            placeholder="서울, 경기"
+            placeholder="예: 서울 강북구"
             disabled={submitting}
           />
           <TextField
@@ -1409,50 +1578,30 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
             mb: 3,
           }}
         >
-          <Select
+          <TextField
+            label="흡연 (smoking)"
             value={form.smoking}
             onChange={(e) => setField('smoking', e.target.value)}
             size="small"
-            displayEmpty
+            placeholder="예: 전자담배만 피움, 비흡연"
             disabled={submitting}
-          >
-            <MenuItem value="">
-              <em>흡연</em>
-            </MenuItem>
-            <MenuItem value="비흡연">비흡연</MenuItem>
-            <MenuItem value="가끔">가끔</MenuItem>
-            <MenuItem value="흡연">흡연</MenuItem>
-          </Select>
-          <Select
+          />
+          <TextField
+            label="음주 (drinking)"
             value={form.drinking}
             onChange={(e) => setField('drinking', e.target.value)}
             size="small"
-            displayEmpty
+            placeholder="예: 가끔 즐겨요"
             disabled={submitting}
-          >
-            <MenuItem value="">
-              <em>음주</em>
-            </MenuItem>
-            <MenuItem value="안함">안함</MenuItem>
-            <MenuItem value="가끔">가끔</MenuItem>
-            <MenuItem value="자주">자주</MenuItem>
-          </Select>
-          <Select
+          />
+          <TextField
+            label="종교 (religion)"
             value={form.religion}
             onChange={(e) => setField('religion', e.target.value)}
             size="small"
-            displayEmpty
+            placeholder="예: 원불교, 없음"
             disabled={submitting}
-          >
-            <MenuItem value="">
-              <em>종교</em>
-            </MenuItem>
-            <MenuItem value="없음">없음</MenuItem>
-            <MenuItem value="기독교">기독교</MenuItem>
-            <MenuItem value="천주교">천주교</MenuItem>
-            <MenuItem value="불교">불교</MenuItem>
-            <MenuItem value="기타">기타</MenuItem>
-          </Select>
+          />
           <TextField
             label="키 (cm)"
             type="number"
@@ -1468,6 +1617,15 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
             size="small"
             placeholder="여행, 운동, 영화"
             sx={{ gridColumn: { sm: 'span 2' } }}
+            disabled={submitting}
+          />
+          <TextField
+            label="스타일 (쉼표로 구분, styles)"
+            value={form.styles}
+            onChange={(e) => setField('styles', e.target.value)}
+            size="small"
+            placeholder="캐주얼, 미니멀"
+            sx={{ gridColumn: { sm: 'span 3' } }}
             disabled={submitting}
           />
         </Box>
@@ -1519,55 +1677,181 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
           multiline
           minRows={3}
           maxRows={6}
+          sx={{ mb: 2 }}
+          disabled={submitting}
+        />
+        <TextField
+          label="이상형·매칭 필터 (partner_filter)"
+          value={form.partner_filter}
+          onChange={(e) => setField('partner_filter', e.target.value)}
+          size="small"
+          fullWidth
+          multiline
+          minRows={2}
+          maxRows={5}
           sx={{ mb: 3 }}
           disabled={submitting}
         />
 
         <Divider sx={{ mb: 2 }} />
 
-        {/* 관리자 옵션 */}
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-          관리자 옵션
+        {/* 강아지 (선택) — public.dogs, owner_id = profiles.id */}
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <PetsIcon fontSize="small" color="primary" />
+          강아지 정보 (선택)
         </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+          한 사용자당 강아지 1마리(owner_id unique)로 저장됩니다. 이름을 입력하면 등록됩니다.
+        </Typography>
+
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
+            강아지 사진 ({dogPreviews.length}/{MAX_DOG_PHOTOS})
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+            {dogPreviews.map((url, idx) => (
+              <Box
+                key={`dog-${url}-${idx}`}
+                sx={{
+                  position: 'relative',
+                  width: 96,
+                  height: 96,
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'grey.100',
+                }}
+              >
+                <Box
+                  component="img"
+                  src={url}
+                  alt={`강아지 미리보기 ${idx + 1}`}
+                  sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+                <IconButton
+                  size="small"
+                  onClick={() => handleRemoveDogFile(idx)}
+                  disabled={submitting}
+                  sx={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    bgcolor: 'rgba(0,0,0,0.55)',
+                    color: 'white',
+                    p: 0.4,
+                    '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
+                  }}
+                >
+                  <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Box>
+            ))}
+            {dogPreviews.length < MAX_DOG_PHOTOS && (
+              <Button
+                component="label"
+                variant="outlined"
+                disabled={submitting}
+                sx={{
+                  width: 96,
+                  height: 96,
+                  borderStyle: 'dashed',
+                  flexDirection: 'column',
+                  gap: 0.5,
+                  color: 'text.secondary',
+                }}
+              >
+                <PhotoCameraIcon />
+                <Typography variant="caption">사진</Typography>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  onChange={handleDogFilesChange}
+                />
+              </Button>
+            )}
+          </Box>
+        </Box>
+
         <Box
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
             gap: 2,
+            mb: 2,
           }}
         >
-          <Box>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-              초기 승인 상태
-            </Typography>
-            <Select
-              value={form.approval_status}
-              onChange={(e) => setField('approval_status', e.target.value as ApprovalStatus)}
-              size="small"
-              fullWidth
-              disabled={submitting}
-            >
-              {APPROVAL_OPTIONS.map((opt) => (
-                <MenuItem key={opt.value} value={opt.value}>
-                  <Chip label={opt.label} size="small" color={opt.color} sx={{ cursor: 'pointer' }} />
-                </MenuItem>
-              ))}
-            </Select>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-            <Button
-              variant={form.is_test_data ? 'contained' : 'outlined'}
-              color="warning"
-              fullWidth
-              size="small"
-              onClick={() => setField('is_test_data', !form.is_test_data)}
-              disabled={submitting}
-              sx={{ height: 40 }}
-            >
-              {form.is_test_data ? '테스트 데이터 ON' : '테스트 데이터 OFF'}
-            </Button>
-          </Box>
+          <TextField
+            label="강아지 이름"
+            value={form.dog_name}
+            onChange={(e) => setField('dog_name', e.target.value)}
+            size="small"
+            disabled={submitting}
+            placeholder="등록 시 필수"
+          />
+          <TextField
+            label="품종"
+            value={form.dog_breed}
+            onChange={(e) => setField('dog_breed', e.target.value)}
+            size="small"
+            disabled={submitting}
+          />
+          <TextField
+            label="나이 (살)"
+            type="number"
+            value={form.dog_age}
+            onChange={(e) => setField('dog_age', e.target.value)}
+            size="small"
+            disabled={submitting}
+          />
+          <TextField
+            label="강아지 성별"
+            value={form.dog_gender}
+            onChange={(e) => setField('dog_gender', e.target.value)}
+            size="small"
+            disabled={submitting}
+            placeholder="예: 남아, 여아"
+          />
+          <TextField
+            label="크기 (size)"
+            value={form.dog_size}
+            onChange={(e) => setField('dog_size', e.target.value)}
+            size="small"
+            disabled={submitting}
+            sx={{ gridColumn: { xs: 'span 1', sm: 'span 2' } }}
+            placeholder="예: 소형, 중형, 대형"
+          />
+          <TextField
+            label="성격 (쉼표로 구분)"
+            value={form.dog_personalities}
+            onChange={(e) => setField('dog_personalities', e.target.value)}
+            size="small"
+            disabled={submitting}
+            sx={{ gridColumn: { sm: 'span 2' } }}
+          />
+          <TextField
+            label="산책 스타일 (쉼표로 구분)"
+            value={form.dog_walk_styles}
+            onChange={(e) => setField('dog_walk_styles', e.target.value)}
+            size="small"
+            disabled={submitting}
+            sx={{ gridColumn: { sm: 'span 2' } }}
+          />
         </Box>
+        <TextField
+          label="강아지 소개 (description)"
+          value={form.dog_description}
+          onChange={(e) => setField('dog_description', e.target.value)}
+          size="small"
+          fullWidth
+          multiline
+          minRows={2}
+          maxRows={4}
+          sx={{ mb: 3 }}
+          disabled={submitting}
+        />
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2 }}>
@@ -1580,7 +1864,7 @@ function AddUserDialog({ open, onClose }: AddUserDialogProps) {
           startIcon={
             submitting ? <CircularProgress size={14} color="inherit" /> : <PersonAddIcon />
           }
-          disabled={submitting || !form.nickname.trim()}
+          disabled={submitting || !form.nickname.trim() || !form.gender}
         >
           {submitting ? '저장 중...' : '추가하기'}
         </Button>
