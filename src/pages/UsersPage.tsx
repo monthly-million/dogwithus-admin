@@ -168,7 +168,8 @@ async function updateApprovalStatus(userId: string, status: ApprovalStatus, reje
 
 /** receiver에게 이미 소개된 카드 프로필 ID (intros, 모든 status — 유니크 제약과 동일하게 중복 소개 방지) */
 async function fetchIntroCardIdsForReceiver(receiverId: string): Promise<string[]> {
-  const { data, error } = await supabase
+  const client = isAdminClientConfigured ? supabaseAdmin : supabase;
+  const { data, error } = await client
     .from('intros')
     .select('card_profile_id')
     .eq('receiver_id', receiverId);
@@ -2188,9 +2189,13 @@ export default function UsersPage() {
   const handleSaveClick = () => {
     if (!isStatusChanged) return;
     if (editStatus === 'approved') {
-      // 수동 매칭 모달을 승인 모드로 열기
-      setMatchModalApprovalMode(true);
-      setMatchModalOpen(true);
+      // invalidate 직후엔 백그라운드 refetch라 목록이 잠깐 옛날일 수 있음(방금 승인한 유저가
+      // 여전히 pending 으로 남아 후보에서 빠지는 현상). 모달 열기 전에 최신 profiles 를 받는다.
+      void (async () => {
+        await queryClient.refetchQueries({ queryKey: ['users'] });
+        setMatchModalApprovalMode(true);
+        setMatchModalOpen(true);
+      })();
     } else if (editStatus === 'rejected') {
       // 거절 사유 입력 다이얼로그 열기
       setRejectReason('');
@@ -2361,7 +2366,13 @@ export default function UsersPage() {
               color="secondary"
               fullWidth
               startIcon={<FavoriteIcon />}
-              onClick={() => setMatchModalOpen(true)}
+              onClick={() => {
+                void (async () => {
+                  await queryClient.refetchQueries({ queryKey: ['users'] });
+                  setMatchModalApprovalMode(false);
+                  setMatchModalOpen(true);
+                })();
+              }}
               sx={{ fontWeight: 600 }}
             >
               수동 매칭
