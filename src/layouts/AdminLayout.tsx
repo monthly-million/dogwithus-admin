@@ -31,7 +31,7 @@ import ConnectWithoutContactIcon from '@mui/icons-material/ConnectWithoutContact
 import StyleIcon from '@mui/icons-material/Style';
 import ChatIcon from '@mui/icons-material/Chat';
 import MessageIcon from '@mui/icons-material/Message';
-import CandyIcon from '@mui/icons-material/Cake';
+import CookieIcon from '@mui/icons-material/Cookie';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import ReportIcon from '@mui/icons-material/Report';
@@ -54,7 +54,7 @@ const NAV_ITEMS = [
   { label: 'Matches', path: '/matches', icon: <FavoriteIcon /> },
   { label: 'Chat Rooms', path: '/chat-rooms', icon: <ChatIcon /> },
   { label: 'Messages', path: '/messages', icon: <MessageIcon /> },
-  { label: 'Candy Transactions', path: '/candy-transactions', icon: <CandyIcon /> },
+  { label: 'Cookie Transactions', path: '/cookie-transactions', icon: <CookieIcon /> },
   { label: 'Notifications', path: '/notifications', icon: <NotificationsIcon /> },
   { label: 'Announcements', path: '/announcements', icon: <CampaignIcon /> },
   { label: 'Purchases', path: '/purchases', icon: <ReceiptLongIcon /> },

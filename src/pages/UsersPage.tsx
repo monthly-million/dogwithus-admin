@@ -121,6 +121,9 @@ const isAdminClientConfigured =
 
 // ─── API functions ────────────────────────────────────────────────────────────
 
+const COOKIE_ADMIN_MANUAL_TYPE = 'admin_manual';
+const COOKIE_ADMIN_MANUAL_DESCRIPTION = '어드민 수동 추가';
+
 async function fetchUsers() {
   const { data, error } = await supabase
     .from('profiles')
@@ -128,6 +131,27 @@ async function fetchUsers() {
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data as User[];
+}
+
+async function grantManualCookieTransaction(userId: string, amount: number, balanceBefore: number) {
+  const balanceAfter = balanceBefore + amount;
+  if (!Number.isFinite(balanceAfter) || balanceAfter < 0) {
+    throw new Error('거래 후 잔액이 0 미만이 될 수 없습니다.');
+  }
+  const { error: insertError } = await supabaseAdmin.from('cookie_transactions').insert({
+    user_id: userId,
+    amount,
+    transaction_type: COOKIE_ADMIN_MANUAL_TYPE,
+    description: COOKIE_ADMIN_MANUAL_DESCRIPTION,
+    balance_after: balanceAfter,
+  });
+  if (insertError) throw insertError;
+  const { error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .update({ cookie_balance: balanceAfter })
+    .eq('id', userId);
+  if (profileError) throw profileError;
+  return balanceAfter;
 }
 
 async function updateApprovalStatus(userId: string, status: ApprovalStatus, rejectedReason?: string) {
@@ -2006,6 +2030,11 @@ export default function UsersPage() {
   const [suspendError, setSuspendError] = useState('');
   const [suspendSuccess, setSuspendSuccess] = useState(false);
 
+  const [cookieAmountInput, setCookieAmountInput] = useState('');
+  const [cookieGrantLoading, setCookieGrantLoading] = useState(false);
+  const [cookieGrantError, setCookieGrantError] = useState('');
+  const [cookieGrantSuccess, setCookieGrantSuccess] = useState(false);
+
   const { data = [], isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: fetchUsers,
@@ -2048,6 +2077,9 @@ export default function UsersPage() {
     setEditSuspendedReason(user.suspended_reason ?? '');
     setSuspendError('');
     setSuspendSuccess(false);
+    setCookieAmountInput('');
+    setCookieGrantError('');
+    setCookieGrantSuccess(false);
   };
 
   const handleCloseDrawer = () => {
@@ -2060,6 +2092,37 @@ export default function UsersPage() {
     setEditSuspendedReason('');
     setSuspendError('');
     setSuspendSuccess(false);
+    setCookieAmountInput('');
+    setCookieGrantError('');
+    setCookieGrantSuccess(false);
+  };
+
+  const handleGrantCookies = async () => {
+    if (!selectedUser) return;
+    const parsed = parseInt(cookieAmountInput.trim(), 10);
+    if (Number.isNaN(parsed) || parsed === 0) {
+      setCookieGrantError('0이 아닌 정수를 입력해 주세요.');
+      return;
+    }
+    const balanceBefore = Number(selectedUser.cookie_balance ?? 0);
+    if (!Number.isFinite(balanceBefore)) {
+      setCookieGrantError('현재 잔액을 확인할 수 없습니다.');
+      return;
+    }
+    setCookieGrantLoading(true);
+    setCookieGrantError('');
+    setCookieGrantSuccess(false);
+    try {
+      const balanceAfter = await grantManualCookieTransaction(selectedUser.id, parsed, balanceBefore);
+      setSelectedUser({ ...selectedUser, cookie_balance: balanceAfter });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setCookieGrantSuccess(true);
+      setCookieAmountInput('');
+    } catch (err) {
+      setCookieGrantError(formatSupabaseError(err, '쿠키 지급에 실패했습니다.'));
+    } finally {
+      setCookieGrantLoading(false);
+    }
   };
 
   const isStatusChanged = editStatus !== '' && editStatus !== selectedUser?.approval_status;
@@ -2303,6 +2366,57 @@ export default function UsersPage() {
             >
               수동 매칭
             </Button>
+
+            <Divider />
+
+            {/* 쿠키 수동 지급 */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                쿠키 지급 (어드민 수동)
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                현재 잔액: <strong>{(selectedUser.cookie_balance ?? 0).toLocaleString()}</strong>
+              </Typography>
+              <TextField
+                label="변동 수량"
+                type="number"
+                size="small"
+                fullWidth
+                value={cookieAmountInput}
+                onChange={(e) => {
+                  setCookieAmountInput(e.target.value);
+                  setCookieGrantError('');
+                  setCookieGrantSuccess(false);
+                }}
+                placeholder="예: 100 (차감 시 음수)"
+                disabled={cookieGrantLoading}
+                slotProps={{ htmlInput: { step: 1 } }}
+                sx={{ mb: 1 }}
+              />
+              {cookieGrantError && (
+                <Alert severity="error" sx={{ mb: 1 }}>
+                  {cookieGrantError}
+                </Alert>
+              )}
+              {cookieGrantSuccess && (
+                <Alert severity="success" sx={{ mb: 1 }}>
+                  쿠키가 반영되었습니다.
+                </Alert>
+              )}
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                fullWidth
+                onClick={handleGrantCookies}
+                disabled={cookieGrantLoading || !cookieAmountInput.trim()}
+                startIcon={
+                  cookieGrantLoading ? <CircularProgress size={14} color="inherit" /> : undefined
+                }
+              >
+                쿠키 적용
+              </Button>
+            </Box>
 
             <Divider />
 

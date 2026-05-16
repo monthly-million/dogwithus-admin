@@ -59,7 +59,7 @@ const columns: GridColDef[] = [
     width: 160,
     renderCell: (p) => (p.value ? dayjs(p.value as string).format('YYYY-MM-DD HH:mm') : '-'),
   },
-  { field: 'candy_used', headerName: '캔디 사용', width: 100, type: 'number' },
+  { field: 'candy_used', headerName: '쿠키 사용', width: 100, type: 'number' },
   {
     field: 'created_at',
     headerName: '생성일',
@@ -148,7 +148,7 @@ export default function SignalsPage() {
                 ['메시지', selected.message],
                 ['상태', selected.status],
                 ['만료일', selected.expires_at ? dayjs(selected.expires_at).format('YYYY-MM-DD HH:mm') : '-'],
-                ['캔디 사용', selected.candy_used],
+                ['쿠키 사용', selected.candy_used],
                 ['생성일', dayjs(selected.created_at).format('YYYY-MM-DD HH:mm:ss')],
               ] as [string, string | number | undefined][]
             ).map(([label, value]) => (

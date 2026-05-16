@@ -9,41 +9,43 @@ import {
   Stack,
   Divider,
   Chip,
+  Alert,
 } from '@mui/material';
 import { DataGrid, type GridColDef } from '@mui/x-data-grid';
 import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../api/supabaseClient';
-import type { CandyTransaction } from '../types/database';
+import { supabaseAdmin } from '../api/supabaseClient';
+import type { CookieTransaction } from '../types/database';
 import dayjs from 'dayjs';
 
-async function fetchCandyTransactions() {
-  const { data, error } = await supabase
-    .from('candy_transactions')
+async function fetchCookieTransactions() {
+  const { data, error } = await supabaseAdmin
+    .from('cookie_transactions')
     .select('*')
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data as CandyTransaction[];
+  return (data ?? []) as CookieTransaction[];
 }
 
-type ChipColor = 'success' | 'error' | 'warning' | 'default';
+type ChipColor = 'success' | 'error' | 'warning' | 'info' | 'default';
 
 const transactionTypeColor = (type?: string): ChipColor => {
   const map: Record<string, ChipColor> = {
     purchase: 'success',
     use: 'error',
     refund: 'warning',
+    admin_manual: 'info',
   };
   return map[type ?? ''] ?? 'default';
 };
 
 const columns: GridColDef[] = [
   { field: 'id', headerName: 'ID', width: 100, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
-  { field: 'user_id', headerName: '유저 ID', width: 130, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
+  { field: 'user_id', headerName: 'User ID', width: 130, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
   {
     field: 'amount',
-    headerName: '금액',
+    headerName: 'Amount',
     width: 100,
     type: 'number',
     renderCell: (p) => {
@@ -60,29 +62,29 @@ const columns: GridColDef[] = [
   },
   {
     field: 'transaction_type',
-    headerName: '거래 유형',
+    headerName: 'Type',
     width: 120,
     renderCell: (p) => (
       <Chip label={String(p.value ?? '-')} size="small" color={transactionTypeColor(p.value as string)} />
     ),
   },
-  { field: 'description', headerName: '설명', width: 220, renderCell: (p) => String(p.value ?? '-') },
-  { field: 'balance_after', headerName: '거래 후 잔액', width: 120, type: 'number' },
+  { field: 'description', headerName: 'Description', width: 220, renderCell: (p) => String(p.value ?? '-') },
+  { field: 'balance_after', headerName: 'Balance after', width: 120, type: 'number' },
   {
     field: 'created_at',
-    headerName: '거래일',
+    headerName: 'Created at',
     width: 160,
     renderCell: (p) => dayjs(p.value as string).format('YYYY-MM-DD HH:mm'),
   },
 ];
 
-export default function CandyTransactionsPage() {
+export default function CookieTransactionsPage() {
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<CandyTransaction | null>(null);
+  const [selected, setSelected] = useState<CookieTransaction | null>(null);
 
-  const { data = [], isLoading } = useQuery({
-    queryKey: ['candy_transactions'],
-    queryFn: fetchCandyTransactions,
+  const { data = [], isLoading, isError, error } = useQuery({
+    queryKey: ['cookie_transactions'],
+    queryFn: fetchCookieTransactions,
   });
 
   const filtered = data.filter(
@@ -96,12 +98,18 @@ export default function CandyTransactionsPage() {
   return (
     <Box>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
-        캔디 거래 관리
+        Cookie Transactions
       </Typography>
+
+      {isError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error instanceof Error ? error.message : 'Failed to load cookie transactions.'}
+        </Alert>
+      )}
 
       <Box sx={{ mb: 2 }}>
         <TextField
-          placeholder="유저 ID, 거래 유형 또는 설명 검색..."
+          placeholder="Search by user ID, type, or description..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           size="small"
@@ -125,7 +133,7 @@ export default function CandyTransactionsPage() {
           loading={isLoading}
           pageSizeOptions={[25, 50, 100]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-          onRowClick={(p) => setSelected(p.row as CandyTransaction)}
+          onRowClick={(p) => setSelected(p.row as CookieTransaction)}
           sx={{ border: 0, '& .MuiDataGrid-row': { cursor: 'pointer' } }}
         />
       </Box>
@@ -138,7 +146,7 @@ export default function CandyTransactionsPage() {
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            캔디 거래 상세
+            Cookie transaction details
           </Typography>
           <IconButton onClick={() => setSelected(null)}>
             <CloseIcon />
@@ -150,12 +158,12 @@ export default function CandyTransactionsPage() {
             {(
               [
                 ['ID', selected.id],
-                ['유저 ID', selected.user_id],
-                ['금액', selected.amount >= 0 ? `+${selected.amount}` : String(selected.amount)],
-                ['거래 유형', selected.transaction_type],
-                ['설명', selected.description],
-                ['거래 후 잔액', selected.balance_after],
-                ['거래일', dayjs(selected.created_at).format('YYYY-MM-DD HH:mm:ss')],
+                ['User ID', selected.user_id],
+                ['Amount', selected.amount >= 0 ? `+${selected.amount}` : String(selected.amount)],
+                ['Type', selected.transaction_type],
+                ['Description', selected.description],
+                ['Balance after', selected.balance_after],
+                ['Created at', dayjs(selected.created_at).format('YYYY-MM-DD HH:mm:ss')],
               ] as [string, string | number | undefined][]
             ).map(([label, value]) => (
               <Box key={label as string}>

@@ -329,7 +329,7 @@ function UserProfileModal({
                     size="small"
                   />
                 </InfoRow>
-                <InfoRow label="캔디 잔액" value={user.cookie_balance != null ? `${user.cookie_balance}개` : undefined} />
+                <InfoRow label="쿠키 잔액" value={user.cookie_balance != null ? `${user.cookie_balance}개` : undefined} />
                 <InfoRow label="가입일" value={dayjs(user.created_at).format('YYYY-MM-DD HH:mm')} />
                 <InfoRow label="ID" value={user.id} mono />
               </Stack>
