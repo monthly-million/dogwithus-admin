@@ -122,14 +122,16 @@ export interface Message {
   created_at: string;
 }
 
-export interface CandyTransaction {
+export interface CookieTransaction {
   id: string;
+  created_at: string;
   user_id: string;
   amount: number;
-  transaction_type?: string;
-  description?: string;
-  balance_after?: number;
-  created_at: string;
+  transaction_type: string;
+  reference_id: string | null;
+  description: string | null;
+  balance_after: number;
+  store_transaction_id: string | null;
 }
 
 export interface PushToken {

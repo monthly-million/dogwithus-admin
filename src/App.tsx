@@ -18,7 +18,7 @@ import SignalsPage from './pages/SignalsPage';
 import MatchesPage from './pages/MatchesPage';
 import ChatRoomsPage from './pages/ChatRoomsPage';
 import MessagesPage from './pages/MessagesPage';
-import CandyTransactionsPage from './pages/CandyTransactionsPage';
+import CookieTransactionsPage from './pages/CookieTransactionsPage';
 import NotificationsPage from './pages/NotificationsPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
@@ -82,7 +82,8 @@ export default function App() {
               <Route path="matches" element={<MatchesPage />} />
               <Route path="chat-rooms" element={<ChatRoomsPage />} />
               <Route path="messages" element={<MessagesPage />} />
-              <Route path="candy-transactions" element={<CandyTransactionsPage />} />
+              <Route path="cookie-transactions" element={<CookieTransactionsPage />} />
+              <Route path="candy-transactions" element={<Navigate to="/cookie-transactions" replace />} />
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="announcements" element={<AnnouncementsPage />} />
               <Route path="reports" element={<ReportsPage />} />
