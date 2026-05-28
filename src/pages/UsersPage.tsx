@@ -604,13 +604,17 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
   };
 
   const handleMatch = async () => {
-    if (selectedIds.length === 0 || matching) return;
+    if (matching) return;
+    // 일반 수동 매칭 모드에서는 최소 1명 선택 필요. 승인 모드에서는 0명도 허용(스킵).
+    if (!approvalMode && selectedIds.length === 0) return;
     setMatching(true);
     setMatchError('');
     setMatchSuccess(false);
     try {
-      await createAdminManualIntros(userA.id, selectedIds);
-      await queryClient.invalidateQueries({ queryKey: ['intros-card-ids-for-receiver', userA.id] });
+      if (selectedIds.length > 0) {
+        await createAdminManualIntros(userA.id, selectedIds);
+        await queryClient.invalidateQueries({ queryKey: ['intros-card-ids-for-receiver', userA.id] });
+      }
       if (approvalMode && onApproveAfterMatch) {
         await onApproveAfterMatch();
         handleClose();
@@ -939,13 +943,10 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
       />
 
       <DialogActions sx={{ px: 3, py: 2, justifyContent: 'space-between', borderTop: '1px solid', borderColor: 'divider' }}>
-        <Typography
-          variant="body2"
-          color={approvalMode && selectedIds.length === 0 ? 'warning.main' : 'text.secondary'}
-        >
+        <Typography variant="body2" color="text.secondary">
           {approvalMode
             ? selectedIds.length === 0
-              ? '승인을 위해 최소 1명 이상 선택해 주세요 (최대 2명)'
+              ? '매칭할 사람을 선택하거나 스킵하고 바로 승인할 수 있습니다 (최대 2명)'
               : `${selectedIds.length}명 선택됨 · 매칭 후 승인됩니다 (최대 2명)`
             : selectedIds.length > 0
               ? `${selectedIds.length}명 선택됨 (최대 2명)`
@@ -959,12 +960,16 @@ function ManualMatchModal({ open, onClose, userA, allUsers, approvalMode = false
             onClick={handleMatch}
             variant="contained"
             color={approvalMode ? 'success' : 'primary'}
-            disabled={selectedIds.length === 0 || matching}
+            disabled={(!approvalMode && selectedIds.length === 0) || matching}
             startIcon={
               matching ? <CircularProgress size={14} color="inherit" /> : <FavoriteIcon />
             }
           >
-            {approvalMode ? '매칭 후 승인' : '매칭하기'}
+            {approvalMode
+              ? selectedIds.length === 0
+                ? '매칭 없이 승인'
+                : '매칭 후 승인'
+              : '매칭하기'}
           </Button>
         </Box>
       </DialogActions>
