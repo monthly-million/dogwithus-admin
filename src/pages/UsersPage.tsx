@@ -151,6 +151,15 @@ async function grantManualCookieTransaction(userId: string, amount: number, bala
     .update({ cookie_balance: balanceAfter })
     .eq('id', userId);
   if (profileError) throw profileError;
+
+  // 앱에 즉시 반영시키는 data push. 앱이 켜져 있으면 type='cookie'를 보고 잔액을 재조회한다.
+  // 실패해도 지급은 이미 커밋됐고 앱은 다음 resume 때 재조회하므로, 로그만 남기고 넘어간다.
+  // invoke는 throw하지 않고 error를 반환한다 — try/catch로는 안 잡힌다.
+  const { error: pushError } = await supabaseAdmin.functions.invoke('send-push', {
+    body: { type: 'cookie', user_id: userId, amount, balance_after: balanceAfter },
+  });
+  if (pushError) console.warn('[쿠키] 지급 푸시 발송 실패', pushError);
+
   return balanceAfter;
 }
 
