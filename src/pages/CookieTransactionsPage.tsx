@@ -10,6 +10,10 @@ import {
   Divider,
   Chip,
   Alert,
+  Paper,
+  Switch,
+  FormControlLabel,
+  Button,
 } from '@mui/material';
 import { DataGrid, type GridColDef } from '@mui/x-data-grid';
 import SearchIcon from '@mui/icons-material/Search';
@@ -26,6 +30,104 @@ async function fetchCookieTransactions() {
     .order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []) as CookieTransaction[];
+}
+
+/**
+ * 가입 웰컴 쿠키 설정. app_settings.signup_bonus = {enabled, amount}.
+ * 값을 읽는 건 앱이 아니라 profiles INSERT 트리거라서, 저장 즉시
+ * 구버전 앱으로 가입하는 사람에게도 그대로 적용된다.
+ */
+function SignupBonusSetting() {
+  const [enabled, setEnabled] = useState(true);
+  const [amount, setAmount] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const { isLoading } = useQuery({
+    queryKey: ['app_settings', 'signup_bonus'],
+    queryFn: async () => {
+      const { data, error } = await supabaseAdmin
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'signup_bonus')
+        .maybeSingle();
+      if (error) throw error;
+      const v = (data?.value ?? { enabled: true, amount: 0 }) as {
+        enabled?: boolean;
+        amount?: number;
+      };
+      setEnabled(v.enabled !== false);
+      setAmount(String(v.amount ?? 0));
+      return v;
+    },
+    staleTime: Infinity,
+  });
+
+  const parsed = parseInt(amount.trim(), 10);
+  const invalid = enabled && (!Number.isFinite(parsed) || parsed < 0);
+
+  const save = async () => {
+    setSaving(true);
+    setSaved(false);
+    setSaveError(null);
+    const { error } = await supabaseAdmin.from('app_settings').upsert({
+      key: 'signup_bonus',
+      value: { enabled, amount: enabled ? parsed : 0 },
+      updated_at: new Date().toISOString(),
+    });
+    setSaving(false);
+    if (error) setSaveError(error.message);
+    else setSaved(true);
+  };
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+        가입 웰컴 쿠키
+      </Typography>
+      <Stack direction="row" spacing={2} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={enabled}
+              disabled={isLoading}
+              onChange={(e) => {
+                setEnabled(e.target.checked);
+                setSaved(false);
+              }}
+            />
+          }
+          label={enabled ? '지급함' : '지급 안 함'}
+        />
+        <TextField
+          size="small"
+          label="지급 개수"
+          value={amount}
+          disabled={!enabled || isLoading}
+          onChange={(e) => {
+            setAmount(e.target.value.replace(/[^0-9]/g, ''));
+            setSaved(false);
+          }}
+          error={invalid}
+          sx={{ width: 140 }}
+        />
+        <Button variant="contained" onClick={save} disabled={invalid || saving || isLoading}>
+          저장
+        </Button>
+        {saved && (
+          <Typography variant="body2" color="success.main">
+            저장됨 — 다음 가입자부터 적용
+          </Typography>
+        )}
+        {saveError && (
+          <Typography variant="body2" color="error.main">
+            {saveError}
+          </Typography>
+        )}
+      </Stack>
+    </Paper>
+  );
 }
 
 type ChipColor = 'success' | 'error' | 'warning' | 'info' | 'default';
@@ -100,6 +202,8 @@ export default function CookieTransactionsPage() {
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
         Cookie Transactions
       </Typography>
+
+      <SignupBonusSetting />
 
       {isError && (
         <Alert severity="error" sx={{ mb: 2 }}>
