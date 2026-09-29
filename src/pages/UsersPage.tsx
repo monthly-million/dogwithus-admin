@@ -164,15 +164,11 @@ async function grantManualCookieTransaction(userId: string, amount: number, bala
 }
 
 async function updateApprovalStatus(userId: string, status: ApprovalStatus, rejectedReason?: string) {
-  const payload: Record<string, unknown> = { approval_status: status };
-  if (status === 'rejected' && rejectedReason !== undefined) {
-    payload.rejected_reason = rejectedReason;
-  }
-  const { error } = await supabaseAdmin
-    .from('profiles')
-    .update(payload)
-    .eq('id', userId);
+  const { data, error } = await supabase.functions.invoke('approve-user', {
+    body: { user_id: userId, status, rejected_reason: rejectedReason },
+  });
   if (error) throw new Error(error.message ?? JSON.stringify(error));
+  if (data?.ok === false) throw new Error(data.error ?? '승인 상태 변경에 실패했습니다.');
 }
 
 /** receiver에게 이미 소개된 카드 프로필 ID (intros, 모든 status — 유니크 제약과 동일하게 중복 소개 방지) */
