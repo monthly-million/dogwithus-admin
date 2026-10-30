@@ -138,12 +138,26 @@ async function approveReview(row: ReviewRow, amount: number) {
   if (pushError) console.warn('[함께하기] 지급 푸시 발송 실패', pushError);
 }
 
+/** 반려: 상태 변경 → 인앱 알림 → 푸시(review_rejected). 승인과 같은 흐름, 쿠키만 없다. */
 async function rejectReview(row: ReviewRow, reason: string) {
   const { error } = await supabaseAdmin
     .from('review_submissions')
     .update({ status: 'rejected', rejected_reason: reason || null, processed_at: new Date().toISOString() })
     .eq('id', row.id);
   if (error) throw error;
+
+  await supabaseAdmin.from('notifications').insert({
+    user_id: row.user_id,
+    title: '함께하기 인증 결과 안내',
+    body: `아쉽지만 이번 후기 인증은 반려됐어요.${reason ? ` 사유: ${reason}` : ''}`,
+    notification_type: 'review_rejected',
+    reference_id: row.id,
+  });
+
+  const { error: pushError } = await supabaseAdmin.functions.invoke('send-push', {
+    body: { type: 'review_rejected', user_id: row.user_id, submission_id: row.id, reason },
+  });
+  if (pushError) console.warn('[함께하기] 반려 푸시 발송 실패', pushError);
 }
 
 // ─── 상세 Drawer ───────────────────────────────────────────────────────────────
@@ -325,7 +339,7 @@ function ReviewDrawerInner({
                   color="inherit"
                   disabled={busy}
                   onClick={() => {
-                    if (window.confirm('반려 처리할까요? 쿠키는 지급되지 않습니다.')) reject.mutate();
+                    if (window.confirm('반려 처리할까요? 쿠키는 지급되지 않고, 유저에게 반려 푸시가 나갑니다.')) reject.mutate();
                   }}
                 >
                   반려 처리
