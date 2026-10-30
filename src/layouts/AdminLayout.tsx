@@ -36,6 +36,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import ReportIcon from '@mui/icons-material/Report';
 import ContactSupportIcon from '@mui/icons-material/ContactSupport';
+import VolunteerActivismIcon from '@mui/icons-material/VolunteerActivism';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import LogoutIcon from '@mui/icons-material/Logout';
 import LockIcon from '@mui/icons-material/Lock';
@@ -60,6 +61,7 @@ const NAV_ITEMS = [
   { label: 'Purchases', path: '/purchases', icon: <ReceiptLongIcon /> },
   { label: 'Reports', path: '/reports', icon: <ReportIcon /> },
   { label: 'Inquiries', path: '/inquiries', icon: <ContactSupportIcon /> },
+  { label: '함께하기', path: '/reviews', icon: <VolunteerActivismIcon /> },
 ];
 
 export default function AdminLayout() {

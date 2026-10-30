@@ -196,3 +196,19 @@ export interface Inquiry {
   created_at: string;
   updated_at: string;
 }
+
+/** public.review_submissions — 함께하기(후기 인증) 제출 */
+export type ReviewChannel = 'instagram' | 'blog' | 'threads' | 'community' | 'other';
+export type ReviewStatus = 'pending' | 'approved' | 'rejected';
+export interface ReviewSubmission {
+  id: string;
+  user_id: string;
+  channel: ReviewChannel;
+  link: string | null;
+  image_urls: string[];
+  status: ReviewStatus;
+  rejected_reason: string | null;
+  cookie_amount: number | null;
+  created_at: string;
+  processed_at: string | null;
+}
