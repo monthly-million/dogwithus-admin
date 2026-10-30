@@ -212,3 +212,17 @@ export interface ReviewSubmission {
   created_at: string;
   processed_at: string | null;
 }
+
+/** public.referrals — 친구 초대 내역. 가입 시 pending → 가입 승인 시 rewarded (DB 트리거가 양쪽 쿠키 지급) */
+export type ReferralStatus = 'pending' | 'rewarded';
+export interface Referral {
+  id: string;
+  inviter_id: string;
+  invitee_id: string;
+  code: string;
+  invitee_nickname: string | null;
+  status: ReferralStatus;
+  cookie_amount: number | null;
+  created_at: string;
+  rewarded_at: string | null;
+}
