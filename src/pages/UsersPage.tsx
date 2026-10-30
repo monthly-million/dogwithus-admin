@@ -56,7 +56,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import PetsIcon from '@mui/icons-material/Pets';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, supabaseAdmin } from '../api/supabaseClient';
-import { fetchSignedUrlsForRefs } from '../lib/signedStorageUrls';
+import { fetchSignedUrlsForRefs, fetchSignedDogPhotoUrls } from '../lib/signedStorageUrls';
 import type { User, BlockedContact } from '../types/database';
 import dayjs from 'dayjs';
 
@@ -2077,6 +2077,26 @@ export default function UsersPage() {
     setLightboxUser(selectedUser);
   };
 
+  // 승인 심사 때 강아지 사진도 같이 봐야 해서 선택 유저의 dogs.photos 를 서명 URL 로 가져온다.
+  const { data: dogPhotoUrls = [], isLoading: dogPhotosLoading } = useQuery({
+    queryKey: ['user-dog-photos', selectedUser?.id],
+    queryFn: async () => {
+      const { data, error } = await supabaseAdmin
+        .from('dogs')
+        .select('photos')
+        .eq('owner_id', selectedUser!.id);
+      if (error) throw error;
+      const paths = (data ?? [])
+        .flatMap((d) => (d.photos as string[] | null) ?? [])
+        .filter((p) => Boolean(p?.trim()));
+      if (paths.length === 0) return [];
+      return (await fetchSignedDogPhotoUrls(paths, DOG_PHOTO_BUCKET, PHOTO_BUCKET)).filter(Boolean);
+    },
+    enabled: Boolean(selectedUser?.id),
+    staleTime: 1000 * 60 * 50,
+    retry: 1,
+  });
+
   const filtered = data.filter(
     (u) =>
       !search ||
@@ -2525,6 +2545,37 @@ export default function UsersPage() {
                           <OpenInNewIcon sx={{ fontSize: 14 }} />
                         </IconButton>
                       </Tooltip>
+                    </ImageListItem>
+                  ))}
+                </ImageList>
+              )}
+            </Box>
+
+            <Divider />
+
+            {/* 강아지 사진 */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                강아지 사진 ({dogPhotoUrls.length}장)
+              </Typography>
+              {dogPhotosLoading ? (
+                <Skeleton variant="rectangular" width={100} height={100} sx={{ borderRadius: 2 }} />
+              ) : dogPhotoUrls.length === 0 ? (
+                <Typography variant="body2" color="text.disabled">
+                  등록된 강아지 사진 없음
+                </Typography>
+              ) : (
+                <ImageList cols={3} gap={8} sx={{ mt: 0, mb: 0 }}>
+                  {dogPhotoUrls.map((url, idx) => (
+                    <ImageListItem key={idx} sx={{ borderRadius: 2, overflow: 'hidden' }}>
+                      <a href={url} target="_blank" rel="noopener noreferrer">
+                        <img
+                          src={url}
+                          alt={`강아지 ${idx + 1}`}
+                          loading="lazy"
+                          style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }}
+                        />
+                      </a>
                     </ImageListItem>
                   ))}
                 </ImageList>
