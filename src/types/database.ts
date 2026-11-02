@@ -99,6 +99,8 @@ export interface Intro {
   source: IntroSource;
   status: IntroStatus;
   signal_id?: string | null;
+  /** 보호자 프로필 열람 시각. daily_free 는 둘 중 하나 선택(또는 쿠키 열람) 전까지 null. */
+  revealed_at?: string | null;
   created_at: string;
   updated_at: string;
 }

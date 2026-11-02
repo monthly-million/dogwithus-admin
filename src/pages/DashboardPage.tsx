@@ -19,6 +19,7 @@ import ChatIcon from '@mui/icons-material/Chat';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { supabase } from '../api/supabaseClient';
 import StatCard from '../components/StatCard';
+import ForceUpdateCard from '../components/ForceUpdateCard';
 import dayjs from 'dayjs';
 
 async function fetchStats() {
@@ -124,6 +125,11 @@ export default function DashboardPage() {
           </Grid>
         ))}
       </Grid>
+
+      {/* 강제 업데이트 설정 */}
+      <Box sx={{ mb: 4 }}>
+        <ForceUpdateCard />
+      </Box>
 
       {/* 차트 */}
       <Grid container spacing={3}>

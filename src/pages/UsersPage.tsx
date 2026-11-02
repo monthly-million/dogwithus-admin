@@ -57,7 +57,7 @@ import PetsIcon from '@mui/icons-material/Pets';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, supabaseAdmin } from '../api/supabaseClient';
 import { fetchSignedUrlsForRefs, fetchSignedDogPhotoUrls } from '../lib/signedStorageUrls';
-import type { User, BlockedContact } from '../types/database';
+import type { User, BlockedContact, Dog } from '../types/database';
 import dayjs from 'dayjs';
 
 const PHOTO_BUCKET = 'profile-photos';
@@ -2077,25 +2077,31 @@ export default function UsersPage() {
     setLightboxUser(selectedUser);
   };
 
-  // 승인 심사 때 강아지 사진도 같이 봐야 해서 선택 유저의 dogs.photos 를 서명 URL 로 가져온다.
-  const { data: dogPhotoUrls = [], isLoading: dogPhotosLoading } = useQuery({
-    queryKey: ['user-dog-photos', selectedUser?.id],
+  // 승인 심사 때 강아지 정보·소개·사진을 같이 봐야 한다 (앱 카드가 강아지 우선으로 바뀜).
+  const { data: dogInfo, isLoading: dogPhotosLoading } = useQuery({
+    queryKey: ['user-dog-info', selectedUser?.id],
     queryFn: async () => {
       const { data, error } = await supabaseAdmin
         .from('dogs')
-        .select('photos')
+        .select('*')
         .eq('owner_id', selectedUser!.id);
       if (error) throw error;
-      const paths = (data ?? [])
+      const dogs = (data ?? []) as Dog[];
+      const paths = dogs
         .flatMap((d) => (d.photos as string[] | null) ?? [])
         .filter((p) => Boolean(p?.trim()));
-      if (paths.length === 0) return [];
-      return (await fetchSignedDogPhotoUrls(paths, DOG_PHOTO_BUCKET, PHOTO_BUCKET)).filter(Boolean);
+      const photoUrls =
+        paths.length === 0
+          ? []
+          : (await fetchSignedDogPhotoUrls(paths, DOG_PHOTO_BUCKET, PHOTO_BUCKET)).filter(Boolean);
+      return { dogs, photoUrls };
     },
     enabled: Boolean(selectedUser?.id),
     staleTime: 1000 * 60 * 50,
     retry: 1,
   });
+  const dogPhotoUrls = dogInfo?.photoUrls ?? [];
+  const dog = dogInfo?.dogs?.[0];
 
   const filtered = data.filter(
     (u) =>
@@ -2548,6 +2554,60 @@ export default function UsersPage() {
                     </ImageListItem>
                   ))}
                 </ImageList>
+              )}
+            </Box>
+
+            <Divider />
+
+            {/* 강아지 정보 — 앱 카드에서 상대가 가장 먼저 보는 내용 */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                강아지 정보
+              </Typography>
+              {dogPhotosLoading ? (
+                <Skeleton variant="rectangular" height={72} sx={{ borderRadius: 2 }} />
+              ) : !dog ? (
+                <Typography variant="body2" color="text.disabled">
+                  등록된 강아지 없음
+                </Typography>
+              ) : (
+                <Stack spacing={1}>
+                  <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                    {dog.name || '(이름 없음)'}
+                    {dog.breed ? (
+                      <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+                        {dog.breed}
+                      </Typography>
+                    ) : null}
+                  </Typography>
+                  <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                    {dog.age ? <Chip size="small" label={`${dog.age}살`} /> : null}
+                    {dog.gender ? <Chip size="small" label={dog.gender} /> : null}
+                    {dog.size ? <Chip size="small" label={dog.size} /> : null}
+                    {(dog.personalities ?? []).map((p) => (
+                      <Chip key={`p-${p}`} size="small" variant="outlined" label={p} />
+                    ))}
+                    {(dog.walk_styles ?? []).map((w) => (
+                      <Chip key={`w-${w}`} size="small" variant="outlined" color="success" label={w} />
+                    ))}
+                  </Stack>
+                  <Box
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 1.5,
+                      bgcolor: dog.description?.trim() ? 'grey.50' : 'warning.50',
+                      border: '1px solid',
+                      borderColor: dog.description?.trim() ? 'divider' : 'warning.light',
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                      강아지 소개 (카드 노출)
+                    </Typography>
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                      {dog.description?.trim() || '⚠️ 소개 없음 — v2 앱에서는 필수. 카드에 빈칸으로 노출됨'}
+                    </Typography>
+                  </Box>
+                </Stack>
               )}
             </Box>
 

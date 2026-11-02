@@ -78,8 +78,9 @@ const statusColor = (status?: string): ChipColor => {
 
 const sourceLabel = (source?: string): string => {
   const map: Record<string, string> = {
-    daily_free: '오늘의 카드',
-    daily_extra: '추가 카드',
+    daily_free: '오늘의 멍멍이',
+    daily_extra: '추가 멍멍이',
+    admin_manual: '어드민 수동',
   };
   return map[source ?? ''] ?? source ?? '-';
 };
@@ -128,6 +129,17 @@ const columns: GridColDef<IntroRow>[] = [
     renderCell: (p) => (
       <Chip label={String(p.value ?? '-')} size="small" color={statusColor(p.value as string)} />
     ),
+  },
+  {
+    field: 'revealed_at',
+    headerName: '보호자 열람',
+    width: 150,
+    renderCell: (p) =>
+      p.value ? (
+        dayjs(p.value as string).format('MM-DD HH:mm')
+      ) : (
+        <Chip label="잠김" size="small" variant="outlined" />
+      ),
   },
   {
     field: 'signal_id',
