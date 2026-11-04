@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Box,
   Typography,
@@ -17,6 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../api/supabaseClient';
 import type { Signal } from '../types/database';
 import dayjs from 'dayjs';
+import UserLink from '../components/UserLink';
 
 async function fetchSignals() {
   const { data, error } = await supabase
@@ -41,8 +42,8 @@ const statusColor = (status?: string): ChipColor => {
 
 const columns: GridColDef[] = [
   { field: 'id', headerName: 'ID', width: 100, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
-  { field: 'sender_id', headerName: '보낸 유저', width: 130, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
-  { field: 'receiver_id', headerName: '받은 유저', width: 130, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
+  { field: 'sender_id', headerName: '보낸 유저', width: 180, renderCell: (p) => <UserLink userId={p.value as string} /> },
+  { field: 'receiver_id', headerName: '받은 유저', width: 180, renderCell: (p) => <UserLink userId={p.value as string} /> },
   { field: 'signal_type', headerName: '타입', width: 100 },
   { field: 'message', headerName: '메시지', width: 200, renderCell: (p) => String(p.value ?? '-') },
   {
@@ -142,15 +143,15 @@ export default function SignalsPage() {
             {(
               [
                 ['ID', selected.id],
-                ['보낸 유저 ID', selected.sender_id],
-                ['받은 유저 ID', selected.receiver_id],
+                ['보낸 유저', <UserLink userId={selected.sender_id} />],
+                ['받은 유저', <UserLink userId={selected.receiver_id} />],
                 ['타입', selected.signal_type],
                 ['메시지', selected.message],
                 ['상태', selected.status],
                 ['만료일', selected.expires_at ? dayjs(selected.expires_at).format('YYYY-MM-DD HH:mm') : '-'],
                 ['쿠키 사용', selected.candy_used],
                 ['생성일', dayjs(selected.created_at).format('YYYY-MM-DD HH:mm:ss')],
-              ] as [string, string | number | undefined][]
+              ] as [string, ReactNode][]
             ).map(([label, value]) => (
               <Box key={label as string}>
                 <Typography variant="caption" color="text.secondary">

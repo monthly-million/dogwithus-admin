@@ -59,6 +59,7 @@ import { supabase, supabaseAdmin } from '../api/supabaseClient';
 import { fetchSignedUrlsForRefs, fetchSignedDogPhotoUrls } from '../lib/signedStorageUrls';
 import type { User, BlockedContact, Dog } from '../types/database';
 import dayjs from 'dayjs';
+import { useSearchParams } from 'react-router-dom';
 
 const PHOTO_BUCKET = 'profile-photos';
 const DOG_PHOTO_BUCKET = 'dog-photos';
@@ -2125,6 +2126,16 @@ export default function UsersPage() {
     setCookieGrantError('');
     setCookieGrantSuccess(false);
   };
+
+  // 다른 페이지(시그널/매칭/카드)의 유저 링크 → #/profiles?user=<id> 로 새 탭에서 열림
+  const [searchParams] = useSearchParams();
+  const linkedUserId = searchParams.get('user');
+  useEffect(() => {
+    if (!linkedUserId || data.length === 0) return;
+    const u = data.find((x) => x.id === linkedUserId);
+    if (u) handleRowClick(u);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedUserId, data]);
 
   const handleCloseDrawer = () => {
     setSelectedUser(null);

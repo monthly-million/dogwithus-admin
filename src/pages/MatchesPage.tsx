@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Box,
   Typography,
@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../api/supabaseClient';
 import type { Match } from '../types/database';
 import dayjs from 'dayjs';
+import UserLink from '../components/UserLink';
 
 async function fetchMatches() {
   const { data, error } = await supabase
@@ -28,8 +29,8 @@ async function fetchMatches() {
 
 const columns: GridColDef[] = [
   { field: 'id', headerName: 'ID', width: 120, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
-  { field: 'user1_id', headerName: '유저 1', width: 150, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
-  { field: 'user2_id', headerName: '유저 2', width: 150, renderCell: (p) => String(p.value ?? '').slice(0, 8) + '...' },
+  { field: 'user1_id', headerName: '유저 1', width: 180, renderCell: (p) => <UserLink userId={p.value as string} /> },
+  { field: 'user2_id', headerName: '유저 2', width: 180, renderCell: (p) => <UserLink userId={p.value as string} /> },
   {
     field: 'signal_id',
     headerName: '시그널 ID',
@@ -114,11 +115,11 @@ export default function MatchesPage() {
             {(
               [
                 ['ID', selected.id],
-                ['유저 1 ID', selected.user1_id],
-                ['유저 2 ID', selected.user2_id],
+                ['유저 1', <UserLink userId={selected.user1_id} />],
+                ['유저 2', <UserLink userId={selected.user2_id} />],
                 ['시그널 ID', selected.signal_id],
                 ['매칭일', dayjs(selected.created_at).format('YYYY-MM-DD HH:mm:ss')],
-              ] as [string, string | undefined][]
+              ] as [string, ReactNode][]
             ).map(([label, value]) => (
               <Box key={label as string}>
                 <Typography variant="caption" color="text.secondary">

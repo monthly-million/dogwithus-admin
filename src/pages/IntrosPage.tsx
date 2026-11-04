@@ -19,6 +19,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabaseAdmin } from '../api/supabaseClient';
 import type { Intro } from '../types/database';
 import dayjs from 'dayjs';
+import UserLink from '../components/UserLink';
 
 type IntroRow = Intro & {
   receiver?: { id: string; nickname: string | null } | null;
@@ -97,22 +98,14 @@ const columns: GridColDef<IntroRow>[] = [
     headerName: '받은 유저',
     width: 160,
     valueGetter: (_v, row) => row.receiver?.nickname ?? row.receiver_id,
-    renderCell: (p) => {
-      const nick = p.row.receiver?.nickname;
-      const id = p.row.receiver_id;
-      return nick ? `${nick} (${id.slice(0, 6)})` : id.slice(0, 8) + '...';
-    },
+    renderCell: (p) => <UserLink userId={p.row.receiver_id} />,
   },
   {
     field: 'card_profile',
     headerName: '카드 프로필',
     width: 160,
     valueGetter: (_v, row) => row.card_profile?.nickname ?? row.card_profile_id,
-    renderCell: (p) => {
-      const nick = p.row.card_profile?.nickname;
-      const id = p.row.card_profile_id;
-      return nick ? `${nick} (${id.slice(0, 6)})` : id.slice(0, 8) + '...';
-    },
+    renderCell: (p) => <UserLink userId={p.row.card_profile_id} />,
   },
   {
     field: 'source',
