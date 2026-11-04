@@ -20,6 +20,7 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { supabase } from '../api/supabaseClient';
 import StatCard from '../components/StatCard';
 import ForceUpdateCard from '../components/ForceUpdateCard';
+import CardModeCard from '../components/CardModeCard';
 import dayjs from 'dayjs';
 
 async function fetchStats() {
@@ -126,10 +127,15 @@ export default function DashboardPage() {
         ))}
       </Grid>
 
-      {/* 강제 업데이트 설정 */}
-      <Box sx={{ mb: 4 }}>
-        <ForceUpdateCard />
-      </Box>
+      {/* 앱 설정: 카드 모드 / 강제 업데이트 */}
+      <Grid container spacing={2} sx={{ mb: 4 }}>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <CardModeCard />
+        </Grid>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <ForceUpdateCard />
+        </Grid>
+      </Grid>
 
       {/* 차트 */}
       <Grid container spacing={3}>
