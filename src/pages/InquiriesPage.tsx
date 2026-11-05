@@ -87,18 +87,42 @@ async function fetchUserById(userId: string): Promise<User> {
 }
 
 async function updateInquiry(
-  id: string,
+  inquiry: Inquiry,
   payload: { status: InquiryStatus; admin_reply: string | null },
 ): Promise<void> {
+  const reply = payload.admin_reply?.trim() || null;
   const update: Record<string, unknown> = {
     status: payload.status,
-    admin_reply: payload.admin_reply || null,
+    admin_reply: reply,
   };
-  if (payload.admin_reply) {
+  if (reply) {
     update.admin_replied_at = new Date().toISOString();
   }
-  const { error } = await supabaseAdmin.from('inquiries').update(update).eq('id', id);
+  const { error } = await supabaseAdmin.from('inquiries').update(update).eq('id', inquiry.id);
   if (error) throw error;
+
+  // 답변이 새로 달리거나 내용이 바뀐 경우에만 인앱 알림 + 푸시(inquiry_answered).
+  // 상태만 바꾸거나 같은 답변을 다시 저장하면 보내지 않는다.
+  if (!reply || reply === (inquiry.admin_reply?.trim() || null)) return;
+
+  await supabaseAdmin.from('notifications').insert({
+    user_id: inquiry.user_id,
+    title: '1:1 문의 답변이 도착했어요 💬',
+    body: `"${inquiry.subject}" 문의에 답변을 남겼어요.`,
+    notification_type: 'inquiry_answered',
+    reference_id: inquiry.id,
+  });
+
+  const { error: pushError } = await supabaseAdmin.functions.invoke('send-push', {
+    body: {
+      type: 'inquiry_answered',
+      user_id: inquiry.user_id,
+      inquiry_id: inquiry.id,
+      subject: inquiry.subject,
+      reply,
+    },
+  });
+  if (pushError) console.warn('[문의] 답변 푸시 발송 실패', pushError);
 }
 
 // ─── InquiryDetailDrawer ──────────────────────────────────────────────────────
@@ -124,7 +148,7 @@ function InquiryDetailDrawer({ inquiry, onClose }: InquiryDetailDrawerProps) {
 
   const mutation = useMutation({
     mutationFn: (payload: { status: InquiryStatus; admin_reply: string | null }) =>
-      updateInquiry(inquiry!.id, payload),
+      updateInquiry(inquiry!, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inquiries'] });
       setDirty(false);
