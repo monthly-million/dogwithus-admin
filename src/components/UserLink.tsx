@@ -8,9 +8,15 @@ export function useProfileNames() {
   const { data } = useQuery({
     queryKey: ['profile-names'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('profiles').select('id, nickname');
+      const { data, error } = await supabase.from('profiles').select('id, nickname, deleted_at');
       if (error) throw error;
-      return Object.fromEntries((data ?? []).map((p) => [p.id, p.nickname as string | null]));
+      // 탈퇴 회원은 닉네임 뒤에 (탈퇴) — 닉네임은 탈퇴 후에도 DB 에 보존된다.
+      return Object.fromEntries(
+        (data ?? []).map((p) => [
+          p.id,
+          p.nickname ? `${p.nickname}${p.deleted_at ? ' (탈퇴)' : ''}` : (p.nickname as string | null),
+        ]),
+      );
     },
     staleTime: 1000 * 60 * 5,
   });
